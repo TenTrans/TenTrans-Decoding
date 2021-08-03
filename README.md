@@ -62,10 +62,10 @@ dec-depth: 6
 dim-emb: 512
 transformer-dim-ffn: 2048
 transformer-heads: 8
-share-all-embed: True                  ## wheather share source embedding and target embedding
-share-out-embed: True                  ## wheather share target embedding and projrct embedding
+share-all-embed: True                  ## whether share source embedding and target embedding
+share-out-embed: True                  ## whether share target embedding and projrct embedding
 transformer-ffn-activation: relu
-normalize-before: True                 ## wheather pre-norm or post-norm
+normalize-before: True                 ## whether pre-norm or post-norm
 learned-pos: True
 max-seq-length: 512
 use-emb-scale: False
@@ -80,6 +80,7 @@ mini-batch: 16
 beam-size: 4
 
 #trace - debug - info - warn - err(or) - critical - off
+log-level: trace
 ```
 
 #### 4. Compile & Run
