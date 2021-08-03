@@ -80,6 +80,7 @@ mini-batch: 16
 beam-size: 4
 
 #trace - debug - info - warn - err(or) - critical - off
+log-level: trace
 ```
 
 #### 4. Compile & Run
