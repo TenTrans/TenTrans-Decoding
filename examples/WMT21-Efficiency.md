@@ -4,26 +4,36 @@
 Our teacher and studentmodels are trained constrained of WMT21 En-De news data（http://statmt.org/wmt21/translation-task.html）, and the development set is En-De newstest2019.
 
 - bilingual data (En-De): Europarl v10, ParaCrawl v7.1, News Commentary, Wiki Titles v3, Tilde Rapid corpus and WikiMatrix
+
 - monolingual data (De): NewsCrawl2020, Europarl v10, News Commentary
 
+  
 
 ### 2. Model Configurations
-- Teacher-base-20_6 (2xFFN): 20 encooder layes + 6 decoder layers + 8heads + 512 hidden size + 4096 ffn size;
-- Student-base-20_1: 20 encooder layes + 1 decoder layers + 8heads + 512 hidden size + 2048 ffn size;
-- Student-base-10_1: 10 encooder layes + 1 decoder layers + 8heads + 512 hidden size + 2048 ffn size;
-- Student-tiny-20_1: 20 encooder layes + 1 decoder layers + 8heads + 256 hidden size + 1024 ffn size;
+
 All models tie the source embedding, the target embedding, and the softmax weights. 
+
+- Teacher-base-20_6 (2xFFN): 20 encooder layes + 6 decoder layers + 8heads + 512 hidden size + 4096 ffn size
+- Student-base-20_1: 20 encooder layes + 1 decoder layers + 8heads + 512 hidden size + 2048 ffn size
+- Student-base-10_1: 10 encooder layes + 1 decoder layers + 8heads + 512 hidden size + 2048 ffn size
+- Student-tiny-20_1: 20 encooder layes + 1 decoder layers + 8heads + 256 hidden size + 1024 ffn size
 
 ![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
 
 
+
 ### 3. Inference Optimizations
+
 - Attention Caching: Cross-attention Caching + Self-attention Caching of decoder layer.
+
 - Kernel Fusion
 ![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/kernel_fusion.png?raw=true)
 
 - Early-stop
+
 - Sorted & Greedy Search
+
+  
 
 
 ### 4. Performance of different models
