@@ -27,7 +27,7 @@ All models tie the source embedding, the target embedding, and the softmax weigh
 - Attention Caching: Cross-attention Caching + Self-attention Caching of decoder layer.
 
 - Kernel Fusion
-![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/kernel_fusion.png?raw=true)
+![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/kernel_fusion.png width=60% ?raw=true)
 
 - Early-stop
 
