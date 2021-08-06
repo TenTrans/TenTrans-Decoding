@@ -19,11 +19,12 @@ Our teacher and studentmodels are trained WMT21 En-De news data, and the develop
 We relase all models and corresponding docker images, you can follow the instructions below to run our models.
 
 #### Docker Images
-
-- **Teacher-base-20_6(2xFFN)**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
-- **Student-base-20_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput_cuda11
-- **Student-base-10_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput_cuda11
-- **Student-tiny-20_1**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
+```shell
+Teacher-base-20_6(2xFFN): danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
+Student-base-20_1: danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput_cuda11
+Student-base-10_1: danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput_cuda11
+Student-tiny-20_1: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
+```shell
 
 #### Run Docker
 
