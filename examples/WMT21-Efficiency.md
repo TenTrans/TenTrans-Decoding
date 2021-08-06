@@ -1,18 +1,22 @@
 # WMT2021 Efficiency Task
 
-### 1. Model Configurations
+### 1. Data
+Our teacher and studentmodels are trained WMT21 En-De news data, and the development set is En-De newstest2019.
+
+### 2. Model Configurations
 
 ![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
 
 
 
-### 2. Performance
+### 3. Performance
 
 ![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
 
 
 
-### 3. Usage
+### 4. Usage 
+We relase all models and corresponding docker images, you can follow the instructions below to run our models.
 
 #### Docker Images
 
@@ -24,9 +28,11 @@
 #### Run Docker
 
 ```shell
+# the input file must be raw text
 infile_name=newstest2019-ende.en
 outfile_name=newstest2019-ende.en.trans
 container_name=translator
+
 image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h256-ffn1024_gpu_throughput_cuda11
 # image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput_cuda11
 # image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput_cuda11
