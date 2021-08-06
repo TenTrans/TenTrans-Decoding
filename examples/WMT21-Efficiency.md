@@ -1,2 +1,44 @@
+# WMT2021 Efficiency Task
 
-#TODO
+### 1. Model Configurations
+
+![alt text](https://github.com/KaixinWU/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
+
+
+
+### 2. Performance
+
+![alt text](https://github.com/KaixinWU/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
+
+
+
+### 3. Usage
+
+#### Docker Images
+
+- **Teacher-base-20_6(2xFFN)**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
+- **Student-base-20_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput
+- **Student-base-10_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput
+- **Student-tiny-20_1**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
+
+#### Run Docker
+
+```shell
+infile_name=newstest2019-ende.en
+outfile_name=newstest2019-ende.en.trans
+container_name=translator
+image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h256-ffn1024_gpu_throughput
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
+
+# step1: pull docker image
+docker pull ${image_from_docker_hub}
+# step2: run docker image enviroment
+docker run --runtime=nvidia --name=${container_name} -itd ${image_from_docker_hub}
+# step3: copy local input data to docker
+docker cp ${infile_name} ${container_name}:/scripts/${infile_name}
+# step4: run translation pipeline in docker
+docker exec ${container_name} /run.sh GPU throughput /scripts/${infile_name} /scripts/${infile_name}.trans >run.stdout 2>&1
+# step5: copy the translation data from docker to local
+docker cp ${container_name}:/scripts/${infile_name}.trans ${outfile_name}
