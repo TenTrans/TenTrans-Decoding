@@ -2,13 +2,13 @@
 
 ### 1. Model Configurations
 
-![alt text](https://github.com/BojieHu/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
+![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
 
 
 
 ### 2. Performance
 
-![alt text](https://github.com/BojieHu/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
+![alt text](https://github.com/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
 
 
 
