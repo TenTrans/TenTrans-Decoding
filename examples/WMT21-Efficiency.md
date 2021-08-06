@@ -2,13 +2,13 @@
 
 ### 1. Model Configurations
 
-![alt text](https://github.com/KaixinWU/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
+![alt text](https://github.com/BojieHu/TenTrans/TenTrans-Decoding/blob/master/examples/model_conf.png?raw=true)
 
 
 
 ### 2. Performance
 
-![alt text](https://github.com/KaixinWU/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
+![alt text](https://github.com/BojieHu/TenTrans/TenTrans-Decoding/blob/master/examples/performance.png?raw=true)
 
 
 
@@ -16,10 +16,10 @@
 
 #### Docker Images
 
-- **Teacher-base-20_6(2xFFN)**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
-- **Student-base-20_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput
-- **Student-base-10_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput
-- **Student-tiny-20_1**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
+- **Teacher-base-20_6(2xFFN)**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
+- **Student-base-20_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput_cuda11
+- **Student-base-10_1**: danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput_cuda11
+- **Student-tiny-20_1**: danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
 
 #### Run Docker
 
@@ -27,10 +27,10 @@
 infile_name=newstest2019-ende.en
 outfile_name=newstest2019-ende.en.trans
 container_name=translator
-image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h256-ffn1024_gpu_throughput
-# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput
-# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput
-# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput
+image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h256-ffn1024_gpu_throughput_cuda11
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc20dec1-h512-ffn2048_gpu_throughput_cuda11
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-student-enc10dec1-h512-ffn2048_gpu_throughput_cuda11
+# image_from_docker_hub=danielkxwu/wmt2021_tentrans_transformer-teacher-enc20dec6-h512-ffn4096_gpu_throughput_cuda11
 
 # step1: pull docker image
 docker pull ${image_from_docker_hub}
