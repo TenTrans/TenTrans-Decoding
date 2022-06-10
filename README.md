@@ -1,4 +1,4 @@
-## Requirments
+## Requirements
 
 - CMake = 3.11
 
@@ -63,7 +63,7 @@ dim-emb: 512
 transformer-dim-ffn: 2048
 transformer-heads: 8
 share-all-embed: True                  ## whether share source embedding and target embedding
-share-out-embed: True                  ## whether share target embedding and projrct embedding
+share-out-embed: True                  ## whether share target embedding and project embedding
 transformer-ffn-activation: relu
 normalize-before: True                 ## whether pre-norm or post-norm
 learned-pos: True
