@@ -1,17 +1,8 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/2
- *
- */
-
 #include "HUBaseLayer.h"
 
-namespace TenTrans
-{
+namespace TenTrans{
 
-HUPtr<HUShape> HUBaseLayer::GetShapeByModel(std::string pname, cnpy::npz_t modelNpz)
-{
+HUPtr<HUShape> HUBaseLayer::GetShapeByModel(std::string pname, cnpy::npz_t modelNpz){
     HUPtr<HUShape> shape = HUNew<HUShape>();
     if(modelNpz[pname]->shape.size() == 1)
     {   
@@ -22,9 +13,8 @@ HUPtr<HUShape> HUBaseLayer::GetShapeByModel(std::string pname, cnpy::npz_t model
     else
     {   
         shape->resize(modelNpz[pname]->shape.size());
-        for(int i = 0; i < modelNpz[pname]->shape.size(); ++i) {
+        for(int i = 0; i < modelNpz[pname]->shape.size(); ++i)
             shape->set(i, modelNpz[pname]->shape[i]);
-        }
     }   
 
     return shape;

@@ -27,7 +27,7 @@ public:
 class HUBatch{
 private:
 	std::vector<size_t> indices_;       // [batch_size * max_seq_len]
-	std::vector<float> mask_;           // [batch_size * max_seq_len]
+	std::vector<TT_DATA_TYPE> mask_;           // [batch_size * max_seq_len]
 	size_t size_;                       // batch_size
 	size_t width_;                      // max_seq_len
 	size_t words_;                      // The total number of words in the batch, considering the mask.
@@ -39,14 +39,14 @@ private:
 public:
 	HUBatch(size_t size, size_t width, const HUPtr<HUVocab>& vocab)
       : indices_(size * width, PAD_ID),
-        mask_(size * width, 0),
+        mask_(size * width, (TT_DATA_TYPE)0.f),
         size_(size),
         width_(width),
         words_(0),
         vocab_(vocab) {}
 	
 	std::vector<size_t>& data() { return indices_; }
-	std::vector<float>& mask() { return mask_; }
+	std::vector<TT_DATA_TYPE>& mask() { return mask_; }
     std::vector<float>& lengths() { return lengths_; }
 	const HUPtr<HUVocab>& vocab() const { return vocab_; }
 
@@ -69,8 +69,8 @@ private:
 
 public:
 	HUTextInput(std::vector<std::string> sources, HUPtr<HUVocab> vocab);
-	std::vector<HUSentence> ToSents();
-	HUPtr<HUBatch> ToBatch(const std::vector<HUSentence>& batchVector);
+	std::vector<HUPtr<HUSentence>> ToSents();
+	HUPtr<HUBatch> ToBatch(const std::vector<HUPtr<HUSentence>>& batchVector);
 
 };
 

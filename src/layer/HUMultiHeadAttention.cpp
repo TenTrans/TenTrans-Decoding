@@ -54,7 +54,7 @@ namespace TenTrans{
 		HUPtr<HUMemoryPiece> selfMem, contextMem;
 	
 		
-		selfMem = this->memPool_->alloc<float>(selfShape->elements());
+		selfMem = this->memPool_->alloc<TT_DATA_TYPE>(selfShape->elements());
 #ifdef DEBUG_MOD
 		LOG(trace, "[TenTrans][MultiHeadAttention] Loading {} parameters, {}", selfParam, selfShape->toString());	
 #endif
@@ -63,7 +63,7 @@ namespace TenTrans{
 		{
 			string contextParam = this->context_ + param;
 			contextShape = GetShapeByModel(contextParam, this->modelNpz_);
-			contextMem = this->memPool_->alloc<float>(contextShape->elements());
+			contextMem = this->memPool_->alloc<TT_DATA_TYPE>(contextShape->elements());
 #ifdef DEBUG_MOD
 			LOG(trace, "[TenTrans][MultiHeadAttention] Loading {} parameters, {}",contextParam, contextShape->toString());
 #endif
@@ -149,7 +149,7 @@ namespace TenTrans{
 		switch(e){
 			case Wq:
 			{
-				this->self_Wq->set((float*)np->data(), (float*)np->data() + size);
+				this->self_Wq->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_Wq->debug());
 #endif
@@ -157,14 +157,14 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_Wq->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_Wq->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 
 				break;
 			}
 			case bq: 
 			{
-				this->self_bq->set((float*)np->data(), (float*)np->data() + size);
+				this->self_bq->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_bq->debug());
 #endif
@@ -172,13 +172,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_bq->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_bq->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case Wk: 
 			{
-				this->self_Wk->set((float*)np->data(), (float*)np->data() + size);
+				this->self_Wk->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_Wk->debug());
 #endif
@@ -186,13 +186,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_Wk->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_Wk->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case bk: 
 			{
-				this->self_bk->set((float*)np->data(), (float*)np->data() + size);
+				this->self_bk->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_bk->debug());
 #endif
@@ -200,13 +200,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_bk->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_bk->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case Wv: 
 			{
-				this->self_Wv->set((float*)np->data(), (float*)np->data() + size);
+				this->self_Wv->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_Wv->debug());
 #endif
@@ -214,13 +214,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_Wv->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_Wv->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case bv: 
 			{
-				this->self_bv->set((float*)np->data(), (float*)np->data() + size);
+				this->self_bv->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_bv->debug());
 #endif
@@ -228,13 +228,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_bv->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_bv->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case Wo:
 			{
-				this->self_Wo->set((float*)np->data(), (float*)np->data() + size);
+				this->self_Wo->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_Wo->debug());
 #endif
@@ -242,13 +242,13 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_Wo->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_Wo->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
 			case bo: 
 			{
-				this->self_bo->set((float*)np->data(), (float*)np->data() + size);
+				this->self_bo->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
                 LOG(trace, "[TenTrans][MultiHeadAttention] {} {}", selfParam, this->self_bo->debug());
 #endif
@@ -256,7 +256,7 @@ namespace TenTrans{
 				if(!isEncoder_)
 				{
 					auto contextNp = this->modelNpz_[contextParam];
-					this->context_bo->set((float*)contextNp->data(), (float*)contextNp->data() + size);
+					this->context_bo->set((TT_DATA_TYPE*)contextNp->data(), (TT_DATA_TYPE*)contextNp->data() + size);
 				}
 				break;
 			}
@@ -344,11 +344,9 @@ HUPtr<HUTensor> HUMultiHeadAttention::MultiHead(HUPtr<HUTensor> q, const HUPtr<H
         LOG(trace, "[TenTrans][HUMultiHeadAttention][MultiHead]Layer {}, bq {}", layerId_, this->self_bq->debug());
 #endif
         qh = HUTensorUtil::Affine(q, this->self_Wq, this->self_bq, this->memPool_, this->device_);
-        HUPtr<HUTensor> qh_tmp = HUTensorUtil::Multiply(q, this->self_Wq, this->memPool_, this->device_);
 #ifdef DEBUG_MOD
-        LOG(trace, "[TenTrans][HUMultiHeadAttention][MultiHead]Layer {}, qh_tmp {}", layerId_,  qh_tmp->debug());
+        LOG(trace, "[TenTrans][HUMultiHeadAttention][MultiHead]Layer {}, qh {}", layerId_,  qh->debug());
 #endif
-        this->memPool_->free(qh_tmp->memory());
 
         // std::cout << "is Self Attention..." << std::endl;
     }
@@ -629,10 +627,8 @@ HUPtr<HUTensor> HUMultiHeadAttention::ForwardFusedEncoderSelfAttention(HUPtr<HUT
     return attentionOutput;
 }
 
-HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone)
+HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos, int realDimBatch, uint8_t* isAllDone)
 {
-    // LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] input {}", input->debug());
-
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] input {}", input->debug());
 #endif
@@ -648,7 +644,6 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLa
     HUPtr<HUTensor> curCacheKeys, curCacheValues;
 #endif
 
-    // const int local_beam_size = 1;
     if (startPos == 0)
     {
 #ifdef SELF_ATTENTION_FUSION   // MAX_DECODER_STEPS=256
@@ -690,7 +685,7 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLa
 #ifdef SELF_ATTENTION_FUSION
     auto qkvh = HUTensorUtil::Multiply(input, this->self_Wqkv_fusion, this->memPool_, this->device_);
     auto attentionOut = HUTensorUtil::FusedQKVSelfAttention(qkvh, this->self_bqkv_fusion, curCacheKeys, curCacheValues, 
-            isAllDoneCopy, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
+            realDimBatch, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
     this->memPool_->free(qkvh->memory());
 
     decoderLayerState.cacheKeys = curCacheKeys;
@@ -724,7 +719,6 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLa
     LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] curCacheValues {}", curCacheValues->debug());
     LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] attentionOut {}", attentionOut->debug());
 #endif
-    // LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] attentionOut {}", attentionOut->debug());
 
     /* Output, [dimBatch, 1, dimModel] */
     HUPtr<HUTensor> output;
@@ -737,114 +731,6 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLa
 
     return output;
 }
-
-/*
-HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos)
-{
-
-#ifdef DEBUG_MOD
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] input {}", input->debug());
-#endif
-
-    int dimBatch = input->shape()[-3];
-    int dimModel = input->shape()[-1];
-#ifdef SELF_ATTENTION_FUSION
-    int dimX = 4;
-    int dimHead = this->heads_;
-    int dimPerHead = dimModel / dimHead;
-#else
-    HUPtr<HUTensor> qh = HUTensorUtil::Affine(input, this->self_Wq, this->self_bq, this->memPool_, this->device_);
-    HUPtr<HUTensor> kh = HUTensorUtil::Affine(input, this->self_Wk, this->self_bk, this->memPool_, this->device_);
-    HUPtr<HUTensor> vh = HUTensorUtil::Affine(input, this->self_Wv, this->self_bv, this->memPool_, this->device_);
-#endif
-
-    HUPtr<HUTensor> curCacheKeys, curCacheValues;
-    if (startPos == 0)
-    {
-#ifdef SELF_ATTENTION_FUSION 
-        curCacheKeys = HUTensorUtil::Zeros({dimBatch, dimHead * dimPerHead / dimX, 1, dimX}, this->memPool_, this->device_);
-        curCacheValues = HUTensorUtil::Zeros({dimBatch, dimHead, 1, dimPerHead}, this->memPool_, this->device_);
-#else
-        HUTensorUtil::CopyFrom(curCacheKeys, kh, this->memPool_, this->device_);
-        HUTensorUtil::CopyFrom(curCacheValues, vh, this->memPool_, this->device_);
-#endif
-    }
-    else
-    {
-        auto prevCacheKeys = prevdecoderLayerState.cacheKeys;
-        auto prevCacheValues = prevdecoderLayerState.cacheValues;
-        
-#ifdef SELF_ATTENTION_FUSION
-        auto tmpCurStepKeyCache = HUTensorUtil::Zeros({dimBatch, dimHead * dimPerHead / dimX, 1, dimX}, 
-                this->memPool_, this->device_);
-        auto tmpCurStepValueCache = HUTensorUtil::Zeros({dimBatch, dimHead, 1, dimPerHead}, 
-                this->memPool_, this->device_);
-        curCacheKeys = HUTensorUtil::Concatenate({prevCacheKeys, tmpCurStepKeyCache}, -2, this->memPool_);
-        curCacheValues = HUTensorUtil::Concatenate({prevCacheValues, tmpCurStepValueCache}, -2, this->memPool_);
-        this->memPool_->free(tmpCurStepKeyCache->memory());
-        this->memPool_->free(tmpCurStepValueCache->memory());
-#else
-        curCacheKeys = HUTensorUtil::Concatenate({prevCacheKeys, kh}, -2, this->memPool_);
-        curCacheValues = HUTensorUtil::Concatenate({prevCacheValues, vh}, -2, this->memPool_);
-#endif
-
-        this->memPool_->free(prevCacheKeys->memory());
-        this->memPool_->free(prevCacheValues->memory());
-    }
-
-#ifdef DEBUG_MOD
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] curCacheKeys {}", curCacheKeys->debug());
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] curCacheValues {}", curCacheValues->debug());
-#endif
-
-#ifdef SELF_ATTENTION_FUSION
-    auto qkvh = HUTensorUtil::Multiply(input, this->self_Wqkv_fusion, this->memPool_, this->device_);
-    auto attentionOut = HUTensorUtil::FusedQKVSelfAttention(qkvh, this->self_bqkv_fusion, curCacheKeys, curCacheValues, 
-            this->heads_, startPos, this->memPool_, this->device_);
-    this->memPool_->free(qkvh->memory());
-#else
-    auto qhs = SplitHeads(qh);
-    auto khs = SplitHeads(curCacheKeys);
-    auto vhs = SplitHeads(curCacheValues);
-
-    this->memPool_->free(qh->memory());
-    this->memPool_->free(kh->memory());
-    this->memPool_->free(vh->memory());
-    */
-
-    /* [dimBatch, dimHead, 1, dimPerHead] */
-    /*
-    auto attentionOut = Attention(qhs, khs, vhs, selfMask);
-    this->memPool_->free(qhs->memory());
-    this->memPool_->free(khs->memory());
-    this->memPool_->free(vhs->memory());
-    */
-
-    /* MultiHead Merge, [dimBatch, dimHead, 1, dimPerHead] -> [dimBatch, 1, dimModel] */
-    /*
-    attentionOut = HUTensorUtil::Reshape(attentionOut, {dimBatch, 1, dimModel});
-#endif
-    decoderLayerState.cacheKeys = curCacheKeys;
-    decoderLayerState.cacheValues = curCacheValues;
-
-#ifdef DEBUG_MOD
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] curCacheKeys {}", curCacheKeys->debug());
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] curCacheValues {}", curCacheValues->debug());
-    LOG(trace, "[TenTrans][HUMutiHeadAttention][DecoderLayerSelfAttention] attentionOut {}", attentionOut->debug());
-#endif */
-
-    /* Output, [dimBatch, 1, dimModel] */ 
-    /*
-    HUPtr<HUTensor> output;
-#ifdef BIAS_LAYERNORM_FUSION
-    output = HUTensorUtil::Multiply(attentionOut, this->self_Wo, this->memPool_, this->device_);
-#else
-    output = HUTensorUtil::Affine(attentionOut, this->self_Wo, this->self_bo, this->memPool_, this->device_);
-#endif
-    this->memPool_->free(attentionOut->memory());
-    
-    return output;
-} */
 
 HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention_V2(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos)
 {
@@ -944,7 +830,7 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerSelfAttention_V2(State& decode
 }
 
 
-HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerCrossAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> q, const HUPtr<HUTensor> &memory, const HUPtr<HUTensor> &mask, HUPtr<HUTensor> &lengths, int startPos, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone)
+HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerCrossAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> q, const HUPtr<HUTensor> &memory, const HUPtr<HUTensor> &mask, HUPtr<HUTensor> &lengths, int startPos, int realDimBatch, uint8_t* isAllDone)
 {
 #ifdef CROSS_ATTENTION_FUSION
     HUPtr<HUTensor> qh = HUTensorUtil::Multiply(q, this->context_Wq, this->memPool_, this->device_);
@@ -1009,7 +895,7 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerCrossAttention(State& decoderL
 #ifdef CROSS_ATTENTION_FUSION
     if (startPos == 0) {
         attentionOut = HUTensorUtil::CrossAttention(qh, this->context_bq, kh, this->context_bk, vh, this->context_bv, 
-                lengths, isAllDoneCopy, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
+                lengths, realDimBatch, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
     }
     else
     {
@@ -1027,7 +913,7 @@ HUPtr<HUTensor> HUMultiHeadAttention::DecoderLayerCrossAttention(State& decoderL
         beamLengths = HUTensorUtil::Reshape(beamLengths, {qh->shape()[-3]});
 
         attentionOut = HUTensorUtil::CrossAttention(qh, this->context_bq, kh, this->context_bk, vh, this->context_bv, 
-                beamLengths, isAllDoneCopy, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
+                beamLengths, realDimBatch, isAllDone, this->heads_, startPos, this->memPool_, this->device_);
         this->memPool_->free(beamLengths->memory());
     }
 

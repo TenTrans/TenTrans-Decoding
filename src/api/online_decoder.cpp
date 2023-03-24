@@ -4,13 +4,17 @@ void OnlineDecoder::Init(std::string configPath)
 {
     /* loading configuration file  */
     // std::vector<string> argv{"-c", configPath};
-    char** argv = new char*[2];
+    char** argv = new char*[3];
+	const char* tmp1 = "TenTrans";
     const char* tmp = "-c";
-    argv[0] = const_cast<char*>(tmp);
-    argv[1] = const_cast<char*>(configPath.c_str()); 
+    argv[0] = const_cast<char*>(tmp1);
+	argv[1] = const_cast<char*>(tmp);
+    argv[2] = const_cast<char*>(configPath.c_str());
+	printf("[AM_TMP_DEBUG] the config path in the interface is %s\n", argv[2]);
     this->config_ = HUNew<HUConfig>();
-    this->config_->Init(2, argv, HUConfigMode::translating);
-    delete argv;
+    this->config_->Init(3, argv, HUConfigMode::translating);
+	printf("[AM_TMP_DEBUG] the config is done\n");
+    // delete argv;
 
     /* setting device */
     std::vector<DeviceId> deviceIDs = this->config_->getDevices();
@@ -38,7 +42,8 @@ void OnlineDecoder::Init(std::string configPath)
 
     /* beam search */
     size_t beamSize = this->config_->get<size_t>("beam-size");
-    this->search_ = HUNew<HUBeamSearch>(this->config_, this->encDec_, beamSize, EOS_ID, UNK_ID, this->memPool_, this->device_);
+    bool earlyStop = this->config_->get<bool>("early-stop");
+    this->search_ = HUNew<HUBeamSearch>(this->config_, this->encDec_, beamSize, earlyStop, EOS_ID, UNK_ID, this->memPool_, this->device_);
 }
 
 void OnlineDecoder::DoJob(std::vector<string> &inputs, std::vector<string> &outputs)

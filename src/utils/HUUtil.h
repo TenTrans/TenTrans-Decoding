@@ -23,7 +23,7 @@ void TrimLine(std::string & line);
 
 void SplitUTF8Line(std::string & line, std::vector<std::string> & charVec);
 
-int splitString(const std::string &srcStr,const std::string &splitStr,std::vector<std::string> &destVec);
+int splitString(const std::string &srcStr, const std::string &splitStr,std::vector<std::string> &destVec);
 
 string vec_to_str(vector<string> vec);
 

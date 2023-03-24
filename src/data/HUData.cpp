@@ -75,6 +75,8 @@ HUTextInput::HUTextInput(std::vector<std::string> sources, HUPtr<HUVocab> vocab)
 	this->vocab_ = vocab;
 }
 
+
+/*
 std::vector<HUSentence> HUTextInput::ToSents()
 {
 	std::vector<HUSentence> batchVector;
@@ -82,21 +84,40 @@ std::vector<HUSentence> HUTextInput::ToSents()
 	{
 		std::vector<size_t> ids = this->vocab_->Encode(sources_[i]);
 		batchVector.push_back(*(new HUSentence(i, ids)));
+        // HUPtr<HUSentence> cur_sent = HUNew<HUSentence>(i, ids);  
+        // batchVector.push_back(cur_sent);
 	}
 	return batchVector;
-}
+} 
+*/
 
-HUPtr<HUBatch> HUTextInput::ToBatch(const std::vector<HUSentence>& batchVector)
+std::vector<HUPtr<HUSentence>> HUTextInput::ToSents()
+{
+    std::vector<HUPtr<HUSentence>> batchVector;
+    for(int i=0; i < sources_.size(); i++)
+    {
+        std::vector<size_t> ids = this->vocab_->Encode(sources_[i]);
+        // batchVector.push_back(*(new HUSentence(i, ids)));
+        HUPtr<HUSentence> cur_sent = HUNew<HUSentence>(i, ids);  
+        batchVector.push_back(cur_sent);
+    }
+    return batchVector;
+} 
+
+
+HUPtr<HUBatch> HUTextInput::ToBatch(const std::vector<HUPtr<HUSentence>>& batchVector)
 {
     int maxDim = 0;
 	size_t batchSize = batchVector.size(); 
     std::vector<size_t> sentenceIds; 
     for(auto& sent : batchVector)
     {   
-        if(sent.Size() > maxDim) {
-            maxDim = sent.Size();
+        if(sent->Size() > maxDim) {
+            //// maxDim = sent.Size();
+            maxDim = sent->Size();
         }
-        sentenceIds.push_back(sent.GetId());
+        //// sentenceIds.push_back(sent.GetId());
+        sentenceIds.push_back(sent->GetId());
     }   
 
     // avoid long sentences
@@ -108,15 +129,17 @@ HUPtr<HUBatch> HUTextInput::ToBatch(const std::vector<HUSentence>& batchVector)
     for(int i = 0; i < batchSize; i++)
     {   
         float cur_length = 0.f;
-        int traverse_length = batchVector[i].Size();
+        //// int traverse_length = batchVector[i].Size();
+        int traverse_length = batchVector[i]->Size();
         if (traverse_length > maxDim) {
             traverse_length = maxDim;
         }
 
         for(int k = 0; k < traverse_length; k++)
         {   
-            batch->data()[i*maxDim+k] = batchVector[i][k];
-            batch->mask()[i*maxDim+k] = 1.f;
+            //// batch->data()[i*maxDim+k] = batchVector[i][k];
+            batch->data()[i*maxDim+k] = (*(batchVector[i]))[k];
+            batch->mask()[i*maxDim+k] = (TT_DATA_TYPE)1.f;
             cur_length += 1;
             count++;
         }   

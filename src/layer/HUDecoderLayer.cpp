@@ -50,7 +50,7 @@ HUDecoderLayer::~HUDecoderLayer()
 
 }
 
-HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone)
+HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, int realDimBatch, uint8_t* isAllDone)
 {
     HUPtr<HUTensor> output;
     if (this->isNormalizeBefore_)  // pre-norm
@@ -59,7 +59,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
         // 1. self_attention(layer_norm(x))
         auto ln1Output = this->lnLayer1_->Forward(embedding, 1e-12);
         auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, 
-                ln1Output, selfAttMask, position, isAllDoneCopy, isAllDone);
+                ln1Output, selfAttMask, position, realDimBatch, isAllDone);
         this->memPool_->free(ln1Output->memory());
 
         // 2. add_bias_input_layernorm
@@ -70,7 +70,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 
         // 3. cross_attention
         HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, 
-                ln2Output, encoderContext, encoderMask, lengths, position, isAllDoneCopy, isAllDone);
+                ln2Output, encoderContext, encoderMask, lengths, position, realDimBatch, isAllDone);
         this->memPool_->free(ln2Output->memory());
 
         // 4. add_bias_input_layernorm
@@ -89,7 +89,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 #else
         auto ln1Output = this->lnLayer1_->Forward(embedding, 1e-12);
         auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, 
-                ln1Output, selfAttMask, position, isAllDoneCopy, isAllDone);
+                ln1Output, selfAttMask, position, realDimBatch, isAllDone);
         this->memPool_->free(ln1Output->memory());
         auto resOutput = HUTensorUtil::Plus(selfAttention, embedding, this->memPool_, device_);
         this->memPool_->free(embedding->memory());
@@ -97,7 +97,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 
         auto ln2Output = this->lnLayer2_->Forward(resOutput, 1e-12);
         HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, 
-                ln2Output, encoderContext, encoderMask, lengths, position, isAllDoneCopy, isAllDone);
+                ln2Output, encoderContext, encoderMask, lengths, position, realDimBatch, isAllDone);
         this->memPool_->free(ln2Output->memory());
         auto resOutput2 = HUTensorUtil::Plus(contextAttention, resOutput, this->memPool_, device_);
         this->memPool_->free(resOutput->memory());
@@ -117,7 +117,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 #ifdef BASIC_KERNEL_FUSION
         // 1. self_attention(x) -> add_bias_input_layernorm
         auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, 
-                embedding, selfAttMask, position, isAllDoneCopy, isAllDone);
+                embedding, selfAttMask, position, realDimBatch, isAllDone);
         auto ln1Output = this->lnLayer1_->AddBiasInputForward(selfAttention, embedding, 
                 this->attentionLayer_->GetSelfAttentionOutputBias(), 1e-12);
         this->memPool_->free(embedding->memory());
@@ -125,7 +125,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 
         // 2. cross_attention(x) -> add_bias_input_layernorm
         HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, 
-                ln1Output, encoderContext, encoderMask, lengths, position, isAllDoneCopy, isAllDone);
+                ln1Output, encoderContext, encoderMask, lengths, position, realDimBatch, isAllDone);
         auto ln2Output = this->lnLayer2_->AddBiasInputForward(contextAttention, ln1Output, 
                 this->attentionLayer_->GetCrossAttentionOutputBias(), 1e-12);
         this->memPool_->free(contextAttention->memory());
@@ -138,7 +138,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
         this->memPool_->free(ln2Output->memory());
 #else
         auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, 
-                embedding, selfAttMask, position, isAllDoneCopy, isAllDone);
+                embedding, selfAttMask, position, realDimBatch, isAllDone);
         auto resOutput = HUTensorUtil::Plus(selfAttention, embedding, this->memPool_, device_);
         this->memPool_->free(embedding->memory());
         this->memPool_->free(selfAttention->memory());
@@ -147,7 +147,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
         this->memPool_->free(resOutput->memory());
 
         HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, 
-                ln1Output, encoderContext, encoderMask, lengths, position, isAllDoneCopy, isAllDone);
+                ln1Output, encoderContext, encoderMask, lengths, position, realDimBatch, isAllDone);
         auto resOutput2 = HUTensorUtil::Plus(ln1Output, contextAttention, this->memPool_, device_);
         this->memPool_->free(ln1Output->memory());
         this->memPool_->free(contextAttention->memory());
@@ -171,7 +171,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward(HUPtr<HUTensor> embedding, HUPtr<HUTenso
 }
 
 
-HUPtr<HUTensor> HUDecoderLayer::Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone)
+HUPtr<HUTensor> HUDecoderLayer::Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, int realDimBatch, uint8_t* isAllDone)
 {
 
 	//Step 1. self-attention  [batch, beam, 1, hidden]
@@ -179,7 +179,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTe
     LOG(trace, "[TenTrans][HUDecoderLayer][Forward]Layer {} embedding {}", layerId_, embedding->debug());
     LOG(trace, "[TenTrans][HUDecoderLayer][Forward]Layer {} selfAttMask {}", layerId_, selfAttMask->debug());
 #endif
-	auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, embedding, selfAttMask, position, isAllDoneCopy, isAllDone);
+	auto selfAttention = this->attentionLayer_->DecoderLayerSelfAttention(decoderState, prevDecoderState, embedding, selfAttMask, position, realDimBatch, isAllDone);
 	//std::cout << "decoderState.output " <<  decoderState.output->debug() << std::endl;
 	//std::cout << "self-attention done " << selfAttention->debug() <<std::endl;
 #ifdef DECODER_DEBUG
@@ -224,7 +224,7 @@ HUPtr<HUTensor> HUDecoderLayer::Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTe
 #endif
 
     // HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, ln1Output, encoderContext, encoderMask, position);
-    HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, ln1Output, encoderContext, encoderMask, lengths, position, isAllDoneCopy, isAllDone);
+    HUPtr<HUTensor> contextAttention = this->attentionLayer_->DecoderLayerCrossAttention(decoderState, prevDecoderState, ln1Output, encoderContext, encoderMask, lengths, position, realDimBatch, isAllDone);
 #ifdef DECODER_DEBUG
 	LOG(trace, "[TenTrans][HUDecoderLayer][Forward]Layer {} source-target attention {}", layerId_, contextAttention->debug());
 #endif

@@ -1,9 +1,3 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/2
- *
- */
 
 #pragma once 
 #include <iostream>
@@ -18,29 +12,33 @@
 #include "HUData.h"
 #include "cnpy.h"
 
-namespace TenTrans
-{
+//using namespace std;
 
-class HUBaseLayer
-{
-
+namespace TenTrans{
+class HUBaseLayer{
 public:
 	HUBaseLayer(HUPtr<HUConfig> options, HUPtr<HUMemPool> memoryPool, HUPtr<HUDevice> device, cnpy::npz_t modelNpz, bool isEncoder)
 			: options_(options),
 			  memPool_(memoryPool), 
 			  device_(device),
 			  modelNpz_(modelNpz),
-			  isEncoder_(isEncoder)
-    {
-
+			  isEncoder_(isEncoder) 
+    { 
+        this->dataType_ = TENSOR_DATA_TYPE::TT_FLOAT32;
+        if (options->get<bool>("use-fp16")) {
+            this->dataType_ = TENSOR_DATA_TYPE::TT_FLOAT16;
+        }
     }
-
-	virtual ~HUBaseLayer()
-    {
-
-    }
+	virtual ~HUBaseLayer(){}
 
 	virtual void Init() = 0;
+		
+	//template <typename T>
+	//virtual void NewBySuffix(T e){}
+
+	//template <typename T>
+	//virtual void InitBySuffix(T e){}
+
 	HUPtr<HUShape> GetShapeByModel(std::string pname, cnpy::npz_t modelNpz);
 
 public:
@@ -49,7 +47,7 @@ public:
 	HUPtr<HUDevice> device_;
 	cnpy::npz_t modelNpz_;
 	bool isEncoder_;
-
+    TENSOR_DATA_TYPE dataType_;
 };
 
 }

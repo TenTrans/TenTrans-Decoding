@@ -39,6 +39,7 @@ def savez(infile, args, compress=False, allow_pickle=True, pickle_kwargs=None):
 
 checkpoint = torch.load(sys.argv[1])
 convert_npz = sys.argv[2]
+isFp16 = sys.argv[3]
 
 model_sentenceRep = checkpoint["model_sentenceRep"]
 model_target = checkpoint["model_target"]
@@ -50,7 +51,10 @@ for k in model_sentenceRep:
     v = model_sentenceRep[k]
     print(k, v.size())
     if (k.startswith("encoder.layers")) and (v.dim() == 2):
-        states_dict[k] = v.t().clone().detach().cpu().numpy()
+        if isFp16:
+            states_dict[k] = v.t().clone().detach().cpu().numpy().astype(np.float16)
+        else:
+            states_dict[k] = v.t().clone().detach().cpu().numpy()
         print("[TransPose]...\n")
         print(">>>>>>>>>>>>>>>>> before <<<<<<<<<<<<<<<<<<<<")
         print(v)
@@ -58,14 +62,20 @@ for k in model_sentenceRep:
         print(states_dict[k].shape, states_dict[k])
         print("\n\n")
     else:
-        states_dict[k] = v.detach().cpu()
+        if isFp16:
+            states_dict[k] = v.detach().cpu().numpy().astype(np.float16)
+        else:
+            states_dict[k] = v.detach().cpu().numpy()
 
 # 2. extract params from decoder
 for k in model_target:
     v = model_target[k]
     print(k, v.size())
     if (k.startswith("decoder.layers") or k.startswith("decoder.output_layer")) and (v.dim() == 2):
-        states_dict[k] = v.t().clone().detach().cpu().numpy()
+        if isFp16:
+            states_dict[k] = v.t().clone().detach().cpu().numpy().astype(np.float16)
+        else:
+            states_dict[k] = v.t().clone().detach().cpu().numpy()
         print("[TransPose]...\n")
         print(">>>>>>>>>>>>>>>>> before <<<<<<<<<<<<<<<<<<<<")
         print(v)
@@ -73,12 +83,15 @@ for k in model_target:
         print(states_dict[k].shape, states_dict[k])
         print("\n\n")
     else:
-        states_dict[k] = v.detach().cpu()
+        if isFp16:
+            states_dict[k] = v.detach().cpu().numpy().astype(np.float16)
+        else:
+            states_dict[k] = v.detach().cpu().numpy()
 
 # 3. remove redundant params
-if checkpoint['share_all_embedd']:
+if checkpoint['config']['target']['share_all_embedd']:
     del states_dict["decoder.embedding.weight"]
-if checkpoint['share_out_embedd']:
+if checkpoint['config']['target']['share_out_embedd']:
     del states_dict["decoder.output_layer.weight"]
 
 # 4. save as .npz model

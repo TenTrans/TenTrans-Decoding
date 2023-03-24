@@ -1,4 +1,4 @@
-## Requirements
+## Requirments
 
 - CMake = 3.11
 
@@ -10,7 +10,7 @@
 
 - PyTorch >= 1.4.0
 
-- gcc = 4.8.5
+- gcc = 4.9.4 （Note：非常重要，保证后续编译的GCC版本保持一致）
 
   
 
@@ -36,15 +36,16 @@ srcVocab=$3
 convertSrcVocab=$4
 tgtVocab=$5
 convertTgtVocab=$6
+isFP16=$7
 
 # 1. extract model params as .npz file   note: python need install torch
-CUDA_VISIBLE_DEVICES=0 python load_torch_model.py $model $convertModel
+CUDA_VISIBLE_DEVICES=0 python3 load_torch_model.py $model $convertModel $isFP16
 
 # 2. format source vocabulary as .yml file
-python get_vocab.py $srcVocab $convertSrcVocab
+python3 get_vocab.py $srcVocab $convertSrcVocab
 
 # 3. format target vocabulary as .yml file
-python get_vocab.py $tgtVocab $convertTgtVocab
+python3 get_vocab.py $tgtVocab $convertTgtVocab
 ```
 
 ### 3. Configuration
@@ -57,21 +58,24 @@ models:
 vocabs:
     - ../model/vocab.src.yml
     - ../model/vocab.tgt.yml
+    
 enc-depth: 6
 dec-depth: 6
 dim-emb: 512
 transformer-dim-ffn: 2048
 transformer-heads: 8
-share-all-embed: True                  ## whether share source embedding and target embedding
-share-out-embed: True                  ## whether share target embedding and project embedding
+share-all-embed: True                  ## wheather share source embedding and target embedding
+share-out-embed: True                  ## wheather share target embedding and projrct embedding
 transformer-ffn-activation: relu
-normalize-before: True                 ## whether pre-norm or post-norm
+normalize-before: True                 ## wheather pre-norm or post-norm
 learned-pos: True
 max-seq-length: 512
 use-emb-scale: False
 transformer-ffn-depth: 1
 normalize: 0.6
 decode-length: 50
+early-stop: True
+use-fp16: True
 n-best: True
 
 devices:
@@ -86,9 +90,11 @@ log-level: trace
 #### 4. Compile & Run
 
 ```shell
-cd TenTrans-Decoding/build
+cd TenTrans-Decoding/src
+unzip 3rd_party.zip 
+cd ../build
 sh compile.sh
-sh run.sh
+make                      // 生成libTenTrans.a  libTenTrans_cuda.a静态库
 ```
 
 

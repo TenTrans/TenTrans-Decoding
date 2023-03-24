@@ -19,7 +19,7 @@ public:
 
 	void Init();
     HUPtr<HUDecoderState> PrepareForDecoding(HUPtr<HUBatch> batch);
-	HUPtr<HUDecoderState> Step(HUPtr<HUDecoderState> state, std::vector<size_t>& hypIndices, std::vector<size_t>& embIndices, int beamSize, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+	HUPtr<HUDecoderState> Step(HUPtr<HUDecoderState> state, size_t* hypIndices, int selIdxSize, std::vector<size_t>& embIndices, int beamSize, int realDimBatch, uint8_t* isAllDone);
 
     HUPtr<HUTensor> GetOutputLayerBias() { return output_->GetBias(); }; 
 	

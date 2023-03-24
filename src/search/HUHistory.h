@@ -22,8 +22,8 @@ private:
 	};
 
 public:
-	HUHistory(const size_t lineNo, const size_t maxLen, const size_t beamSize, const float alpha=1.f, float wp=0.f, float worstScore=10000.f)
-        :lineNo_(lineNo), maxLen_(maxLen), beamSize_(beamSize), alpha_(alpha), wp_(wp), worstScore_(worstScore)  {}
+	HUHistory(const size_t lineNo, const size_t maxLen, const size_t beamSize, bool earlyStop, const float alpha=1.f, float wp=0.f, float worstScore=10000.f)
+        :lineNo_(lineNo), maxLen_(maxLen), beamSize_(beamSize), earlyStop_(earlyStop), alpha_(alpha), wp_(wp), worstScore_(worstScore)  {}
 
 	float LengthPenalty(size_t length) { return std::pow((float)length, alpha_); }   // length penalty
 	float WordPenalty(size_t length) { return wp_ * (float)length; }                 // word penalty
@@ -71,6 +71,20 @@ public:
     bool isDone(float curBestPathScore) 
     {
         // std::cout << "[Done]:\t" << "curScore: " << curBestPathScore << "\tworstScore: " << worstScore_ << std::endl;
+
+        // early-stop strategy 
+        if (this->earlyStop_) 
+        { 
+            if (topHyps_.size() >= 1) 
+            { 
+                auto hypCoord = topHyps_.top();
+                if (hypCoord.j == 0) 
+                { 
+                    return true;
+                }
+            }
+        }
+
         if (topHyps_.size() < beamSize_) {   // finished hypos < beam_size, continue BeamSearch
             return false;
         }
@@ -120,6 +134,7 @@ private:
 	const float wp_;                                              // for word penalty
     const float maxLen_;                                          // (srcLen+50-1), for length penalty                                    
     float worstScore_;
+    bool earlyStop_;                                              // early-stop for beam search
 };
 
 typedef std::vector<HUPtr<HUHistory>> HUHistories;

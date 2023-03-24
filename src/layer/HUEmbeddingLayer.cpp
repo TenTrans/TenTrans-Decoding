@@ -1,9 +1,3 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/8
- *
- */
 
 #include "HUEmbeddingLayer.h"
 
@@ -28,8 +22,20 @@ void HUEmbeddingLayer::Init()
 
     auto np = modelNpz_[prefix];
     HUPtr<HUShape> embShape = GetShapeByModel(prefix, this->modelNpz_);
+
+    /***********************
     auto mem = this->memPool_->alloc<float>(embShape->elements()); 
     this->wordEmbedding_ = HUNew<HUTensor>(mem, *embShape, device_);
+    ***********************/
+
+    /********
+    auto mem = this->memPool_->alloc(embShape->elements(), this->dataType_);
+    this->wordEmbedding_ = HUNew<HUTensor>(mem, *embShape, device_, this->dataType_);
+    ********/
+
+    auto mem = this->memPool_->alloc<TT_DATA_TYPE>(embShape->elements()); 
+    this->wordEmbedding_ = HUNew<HUTensor>(mem, *embShape, device_);
+
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][EmbeddingLayer] Loading [{}] parameters, {}", prefix, embShape->toString());
 #endif
@@ -39,7 +45,14 @@ void HUEmbeddingLayer::Init()
     for(size_t dim : np->shape) {
         size *= dim;
     }
+    /* * * *
     this->wordEmbedding_->set((float*)np->data(), (float*)np->data() + size);
+    * * * */
+    /***
+    this->wordEmbedding_->defaultSet(np->data(), size);
+    ***/
+     this->wordEmbedding_->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
+
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][{}] parameters, {}", prefix, (this->wordEmbedding_)->debug());
 #endif
@@ -60,14 +73,14 @@ void HUEmbeddingLayer::InitPosEmbeddings() {
         auto np = modelNpz_[prefix];
         HUPtr<HUShape> embShape;
         embShape = GetShapeByModel(prefix, this->modelNpz_);
-        auto mem = this->memPool_->alloc<float>(embShape->elements());
+        auto mem = this->memPool_->alloc<TT_DATA_TYPE>(embShape->elements());
         this->posEmbedding_ = HUNew<HUTensor>(mem, *embShape, device_);
 
         size_t size = 1;
         for(size_t dim : np->shape) {
             size *= dim;
         }
-        this->posEmbedding_->set((float*)np->data(), (float*)np->data() + size);
+        this->posEmbedding_->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
 #ifdef DEBUG_MOD
         LOG(trace, "[TenTrans][EmbeddingLayer] Loading Learned PostionalEmbedding [{}] parameters, {}, {}", \
                 prefix, embShape->toString(), (this->posEmbedding_)->debug());
@@ -98,7 +111,7 @@ void HUEmbeddingLayer::InitPosEmbeddings() {
         }
 
         HUShape embShape = HUShape({maxSeqLength, dimEmb});
-        auto mem = this->memPool_->alloc<float>(embShape.elements());
+        auto mem = this->memPool_->alloc<TT_DATA_TYPE>(embShape.elements());
         this->posEmbedding_ = HUNew<HUTensor>(mem, embShape, device_);
         this->posEmbedding_->set(vPos);
 #ifdef DEBUG_MOD
@@ -138,9 +151,9 @@ void HUEmbeddingLayer::Forward(HUPtr<HUBatch> batch, HUPtr<HUTensor> &batchEmb, 
 
     /* batch mask for handling padding tokens */
     HUShape maskShape = HUShape({dimBatch, 1, dimWords});
-    auto maskMem = this->memPool_->alloc<float>(maskShape.elements());
+    auto maskMem = this->memPool_->alloc<TT_DATA_TYPE>(maskShape.elements());
     auto maskEmbeddings = HUNew<HUTensor>(maskMem, maskShape, device_);
-    maskEmbeddings->set((float*)batch->mask().data(), (float*)batch->mask().data() + batch->mask().size());	
+    maskEmbeddings->set((TT_DATA_TYPE*)batch->mask().data(), (TT_DATA_TYPE*)batch->mask().data() + batch->mask().size());	
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][HUEmbeddingLayer][Forward] maskEmbeddings {}", maskEmbeddings->debug());
 #endif

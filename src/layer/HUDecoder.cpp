@@ -145,7 +145,7 @@ void HUDecoder::EmbeddingsFromPrediction(HUPtr<HUDecoderState> state, std::vecto
 	state->setTargetEmbeddings(selectedEmbs);
 }
 
-HUPtr<HUTensor> HUDecoder::Step(HUPtr<HUDecoderState> state, States& decoderStates, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone)
+HUPtr<HUTensor> HUDecoder::Step(HUPtr<HUDecoderState> state, States& decoderStates, int realDimBatch, uint8_t* isAllDone)
 {
 	//[dimBatch * dimBeam, 1, dimTrgEmb]
 	auto addPosEmbedding = state->getTargetEmbeddings();
@@ -229,7 +229,7 @@ HUPtr<HUTensor> HUDecoder::Step(HUPtr<HUDecoderState> state, States& decoderStat
 #ifdef DECODER_DEBUG
 		LOG(debug, "[TenTrans][HUDecoder] Forward Decoder Layer {}", i);
 #endif
-		query = decoderLayers_[i]->Forward(query, selfMask, decoderState, prevDecoderState, startPos, encoderContext_, encoderMask, this->lengths_, isAllDoneCopy, isAllDone);
+		query = decoderLayers_[i]->Forward(query, selfMask, decoderState, prevDecoderState, startPos, encoderContext_, encoderMask, this->lengths_, realDimBatch, isAllDone);
 		decoderStates.push_back(decoderState);
 	}
     this->memPool_->free(selfMask->memory());

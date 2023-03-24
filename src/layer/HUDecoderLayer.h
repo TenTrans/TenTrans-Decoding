@@ -14,9 +14,9 @@ class HUDecoderLayer : public HUBaseLayer{
 public:
 	HUDecoderLayer(HUPtr<HUConfig> options, HUPtr<HUMemPool> memoryPool, HUPtr<HUDevice> device, cnpy::npz_t modelNpz, int layerId, bool isEncoder=false);
 	void Init();
-	HUPtr<HUTensor> Forward(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+	HUPtr<HUTensor> Forward(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, int realDimBatch, uint8_t* isAllDone);
 
-    HUPtr<HUTensor> Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+    HUPtr<HUTensor> Forward_V2(HUPtr<HUTensor> embedding, HUPtr<HUTensor> selfAttMask, State& decoderState, State prevDecoderState, int position, HUPtr<HUTensor> encoderContext, HUPtr<HUTensor> encoderMask, HUPtr<HUTensor> lengths, int realDimBatch, uint8_t* isAllDone);
 	~HUDecoderLayer();
 
 public:

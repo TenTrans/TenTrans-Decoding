@@ -1,10 +1,3 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/5
- *
- */
-
 #pragma once
 #include "HUBaseLayer.h"
 #include "HUGlobal.h"

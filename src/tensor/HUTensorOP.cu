@@ -25,8 +25,40 @@ namespace fastertransformer {
                            const int beams_per_batch,
                            const int k,
                            const int vocab_size);
+}  // fastertransformer 
 
-}
+/*
+namespace fastertransformer_V2 {
+
+  template <typename T>
+  void topK_softMax(const T* log_probs, 
+                    const T* bias, 
+                    const uint8_t* finished, 
+                    float* cum_log_probs,
+                    int* ids,
+                    const int K,
+                    void* temp_storage,
+                    const int temp_storage_size,
+                    const int batch_size,
+                    const int beam_width,
+                    const int vocab_size,
+                    const int end_id,
+                    const T diversity_rate);
+
+  template void topK_softMax<float>(const float* log_probs,
+                                  const float* bias,
+                                  const uint8_t* finished,
+                                  float* cum_log_probs,
+                                  int* ids,
+                                  const int K,
+                                  void* tmp_storage,
+                                  const int temp_storage_size,
+                                  const int batch_size,
+                                  const int beam_width,
+                                  const int vocab_size,
+                                  const int end_id,
+                                  const float diversity_rate); 
+}   // astertransformer_V2    */
 
 namespace TenTrans{
 
@@ -128,7 +160,8 @@ void check(T result, char const *const func, const char *const file, int const l
 */
 
 template <typename T>
-__inline__ __device__ T warpReduceSum(T val)
+__inline__ __device__ 
+T warpReduceSum(T val)
 {
   for(int mask = 16; mask > 0; mask >>= 1) {
     val += __shfl_xor_sync(FINAL_MASK, val, mask, 32);
@@ -137,7 +170,8 @@ __inline__ __device__ T warpReduceSum(T val)
 }
 
 template <typename T>
-__inline__ __device__ T warpReduceMax(T val)
+__inline__ __device__ 
+T warpReduceMax(T val)
 {
   #pragma unroll
   for(int mask = 16; mask > 0; mask >>= 1) {
@@ -147,13 +181,14 @@ __inline__ __device__ T warpReduceMax(T val)
 }
 
 template <typename T>
-__inline__ __device__ T blockReduceSum(T val)
+__inline__ __device__ 
+T blockReduceSum(T val)
 {
   static __shared__ T shared[32];
   int lane = threadIdx.x & 0x1f;
   int wid = threadIdx.x >> 5;
 
-  val = warpReduceSum(val);
+  val = warpReduceSum<T>(val);
 
   if(lane == 0) {
     shared[wid] = val;
@@ -167,7 +202,8 @@ __inline__ __device__ T blockReduceSum(T val)
 
 /* Calculate the maximum of all elements in a block */
 template <typename T>
-__inline__ __device__ T blockReduceMax(T val)
+__inline__ __device__ 
+T blockReduceMax(T val)
 {
   static __shared__ T shared[32];
   int lane = threadIdx.x & 0x1f; // in-warp idx
@@ -186,14 +222,6 @@ __inline__ __device__ T blockReduceMax(T val)
   return val;
 }
 
-/*
-cross_attention_kernel_opt<float, 64, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
-          query_buf->data(), Q_bias->data(),
-          key_cache->data(), K_bias->data(),
-          value_cache->data(), V_bias->data(),
-          lengths.data(), context_buf->data(),
-          batch_size, head_num, step, seq_len, scalar);  */
-
 template <typename T, int size_per_head, int block_sz>
 __global__
 void cross_attention_kernel_opt(
@@ -205,7 +233,7 @@ void cross_attention_kernel_opt(
   const int batch_size, const int head_num, const int step, const int seq_len, const float scalar)
 {
 #ifdef DECODER_PADDING_OPTIMIZE
-  if(finished != nullptr && finished[blockIdx.x / beam_size / head_num] == 1) return;
+  if(finished != nullptr && finished[blockIdx.x / beam_size / head_num]) return;
 #endif
 
   typedef Copy_t<T, size_per_head> copy_t;
@@ -530,26 +558,28 @@ void fusedQKV_masked_attention_kernel_opt(
   }
 }
 
-__global__ void cross_attention_kernel(
-  float* query_buf, const float* Q_bias,
-  float* key_cache, const float* K_bias,
-  float* value_cache, const float* V_bias,
-  float* length_per_sample, float* context_buf, 
-  const uint8_t* finished, const int beam_size,  
-  const int batch_size, const int head_num, const int size_per_head, 
-  const int step, const int seq_len, const float scalar)
+template<typename T>
+__global__ 
+void cross_attention_kernel(
+        T* query_buf, const T* Q_bias, 
+        T* key_cache, const T* K_bias, 
+        T* value_cache, const T* V_bias, 
+        T* length_per_sample, T* context_buf, 
+        const uint8_t* finished, const int beam_size, 
+        const int batch_size, const int head_num, const int size_per_head, 
+        const int step, const int seq_len, const T scalar)
 {
 #ifdef DECODER_PADDING_OPTIMIZE
-  if(finished != nullptr && finished[blockIdx.x / beam_size / head_num] == 1) return;
+  if(finished != nullptr && finished[blockIdx.x / beam_size / head_num]) return;
 #endif
 
   int tid = threadIdx.x;
   int bid = blockIdx.x / head_num;
   int head_id = blockIdx.x % head_num;
 
-  extern __shared__ __align__(sizeof(float)) unsigned s_buf[];
-  float* sq = reinterpret_cast<float *>(s_buf);
-  float* logits = reinterpret_cast<float *>(&sq[size_per_head]);
+  extern __shared__ __align__(sizeof(T)) unsigned s_buf[];
+  T* sq = reinterpret_cast<T *>(s_buf);
+  T* logits = reinterpret_cast<T *>(&sq[size_per_head]);
 
   int length = __ldg(&length_per_sample[bid]);
 
@@ -566,7 +596,7 @@ __global__ void cross_attention_kernel(
     int key_id = bid * (seq_len * head_num * size_per_head) + ite * (head_num * size_per_head)
       + head_id * size_per_head + tid;
 
-    float key = tid < size_per_head ? key_cache[key_id] : 0.0f;
+    T key = tid < size_per_head ? key_cache[key_id] : (T)(0.0f);
 
     //For the first step, we should add bias to key memory cache.
     //The KV memory cache only need to be updated at the first step.
@@ -576,8 +606,8 @@ __global__ void cross_attention_kernel(
       key_cache[key_id] = key;
     }
 
-    float val = (tid < size_per_head) ? key * sq[tid] * scalar : 0.0f;
-    float qk = blockReduceSum(val);
+    T val = (tid < size_per_head) ? key * sq[tid] * scalar : (T)(0.0f);
+    T qk = blockReduceSum(val);
     if(threadIdx.x == 0) {
       logits[ite] = qk;
     }
@@ -588,7 +618,7 @@ __global__ void cross_attention_kernel(
   __shared__ float s_max_val, s_sum;
 
   float local_i = tid < length ? (float)logits[tid] : -1e20f;
-  float max_val = blockReduceMax(local_i);
+  float max_val = blockReduceMax<float>(local_i);
   if(tid == 0) {
     s_max_val = max_val;
   }
@@ -596,7 +626,7 @@ __global__ void cross_attention_kernel(
 
   local_i -= s_max_val;
   float local_o = tid < length ? __expf(local_i) : 0.0f;
-  float val = blockReduceSum(local_o);
+  float val = blockReduceSum<float>(local_o);
 
   if(tid == 0) {
     s_sum = val + 1e-6;
@@ -609,13 +639,13 @@ __global__ void cross_attention_kernel(
 
   if(tid < size_per_head)
   {
-    float sum = 0.0f;
+    T sum = (T)0.0f;
     for(int ite = 0; ite < length; ++ite)
     {
       int value_id = bid * seq_len * head_num * size_per_head + ite * head_num * size_per_head
         + head_id * size_per_head + tid;
 
-      float value = value_cache[value_id];
+      T value = value_cache[value_id];
 
       //for the first step, we should add bias to key memory cache
       if(step == 0)
@@ -793,19 +823,23 @@ void cross_attention_kernel_opt(
   }
 } */
 
-__global__ void gCopyRows(float* out,
-                          const float* in,
-                          size_t cols,
-                          const size_t* sourceRowIdx,
-                          size_t rows) {
-  for(int bid = 0; bid < rows; bid += gridDim.x) {
+template <typename T>
+__global__ 
+void gCopyRows(T* out, 
+               const T* in, 
+               size_t cols, 
+               const size_t* sourceRowIdx, 
+               size_t rows) 
+{
+  for(int bid = 0; bid < rows; bid += gridDim.x) 
+  {
     int j = bid + blockIdx.x;
     if(j < rows) {
       size_t dstId = j;
       size_t srcId = sourceRowIdx[j];
 
-      float* rowOut = out + dstId * cols;
-      const float* rowIn = in + srcId * cols;
+      T* rowOut = out + dstId * cols;
+      const T* rowIn = in + srcId * cols;
 
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int i = tid + threadIdx.x;
@@ -815,6 +849,40 @@ __global__ void gCopyRows(float* out,
     }
   }
 }
+
+/*
+template <>
+__global__
+void gCopyRows(half* out, 
+              const half* __restrict in, 
+              size_t cols, 
+              const size_t* sourceRowIdx, 
+              size_t rows)
+{
+  half2* out_ptr = (half2*) out;
+  const half2* in_ptr = (half2*) in;
+
+  for(int bid = 0; bid < rows; bid += gridDim.x)
+  {
+    int j = bid + blockIdx.x;
+    if(j < rows) 
+    { 
+      size_t dstId = j;
+      size_t srcId = sourceRowIdx[j];
+
+      half2* rowOut = out_ptr + dstId * cols;
+      const half2* rowIn = in_ptr + srcId * cols;
+
+      for(int tid = 0; tid < cols; tid += blockDim.x) 
+      {
+        int i = tid + threadIdx.x;
+        if(i < cols)
+          rowOut[i] = rowIn[i];
+      }
+    }
+  }
+}
+*/
 
 void CopyRowsOP(HUPtr<HUTensor> out, const HUPtr<HUTensor> in, const std::vector<size_t>& indices)
 {
@@ -833,10 +901,35 @@ void CopyRowsOP(HUPtr<HUTensor> out, const HUPtr<HUTensor> in, const std::vector
                         rowsToCopy * sizeof(size_t),
                         cudaMemcpyHostToDevice));
 
-  	gCopyRows<<<blocks, threads>>>(
+  	gCopyRows<TT_DATA_TYPE><<<blocks, threads>>>(
       	out->data(), in->data(), cols, d_indices, rowsToCopy);
 
   	CUDA_CHECK(cudaFree(d_indices));
+}
+
+void CopyRowsOP_V2(HUPtr<HUTensor> out, const HUPtr<HUTensor> in, size_t* indices, int rowsToCopy)
+{
+    cudaSetDevice(out->getDeviceId().no);
+
+    size_t cols = in->shape().back();
+    // size_t rowsToCopy = indices.size();
+
+    int threads = std::min(MAX_THREADS, (int)cols);
+    int blocks = std::min(MAX_BLOCKS, (int)rowsToCopy);
+
+    /*
+    size_t* d_indices;
+    CUDA_CHECK(cudaMalloc(&d_indices, rowsToCopy * sizeof(size_t)));
+    CUDA_CHECK(cudaMemcpy(d_indices,
+                        indices.data(),
+                        rowsToCopy * sizeof(size_t),
+                        cudaMemcpyHostToDevice));
+    */
+
+    gCopyRows<TT_DATA_TYPE><<<blocks, threads>>>(
+        out->data(), in->data(), cols, indices, rowsToCopy);
+
+    // CUDA_CHECK(cudaFree(d_indices));
 }
 
 HUPtr<HUTensor> ReshapeOP(HUPtr<HUTensor> in, HUShape shape)
@@ -845,6 +938,7 @@ HUPtr<HUTensor> ReshapeOP(HUPtr<HUTensor> in, HUShape shape)
 	return out;
 }
 
+/*
 extern "C" __global__ 
 void KernelScaleAndShift(float * d, int size, float scale, float shift)
 {
@@ -867,7 +961,31 @@ void KernelScaleAndShift(float * d, int size, float scale, float shift)
             d[i] = d[i] * scale + shift;
         }
     }
-}
+} */
+template <typename T>
+__global__
+void KernelScaleAndShift(T* d, int size, float scale, float shift)
+{
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    
+    bool isUnitScale = (scale == 1.0F);
+    bool isZeroShift = (shift == 0.0F);
+    if (i < size) 
+    {
+        if (isUnitScale && !isZeroShift) {
+            d[i] = d[i] + (T)shift;
+        }
+        else if (isUnitScale && isZeroShift) {
+            d[i] = d[i];
+        }
+        else if (!isUnitScale && isZeroShift) {
+            d[i] = d[i] * (T)scale;
+        }
+        else {
+            d[i] = (T)((float)d[i] * scale + shift);
+        }
+    }
+} 
 
 void ScaleAndShiftOP(HUPtr<HUTensor> &a, float scale, float shift)
 {
@@ -876,9 +994,10 @@ void ScaleAndShiftOP(HUPtr<HUTensor> &a, float scale, float shift)
 	int threads = std::min(MAX_THREADS, length);
 	int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-	 KernelScaleAndShift<<<blocks, threads>>>((float*)a->data(), length, scale, shift);
+	KernelScaleAndShift<TT_DATA_TYPE><<<blocks, threads>>>(a->data(), length, scale, shift);
 }
 
+/*
 extern "C" __global__ 
 void KernelADD(float * a, float * b, float * c, int size, float beta)
 {
@@ -894,7 +1013,29 @@ void KernelADD(float * a, float * b, float * c, int size, float beta)
             c[i] = a[i] + b[i] * beta;
         }
     }
-}
+} */
+
+template <typename T>
+__global__
+void KernelADD(T * a, 
+               T * b, 
+               T * c, 
+               int size, 
+               float beta)
+{
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+    bool isUnitScale = (beta == 1.0F);
+    if (i < size)
+    {
+        if (isUnitScale) {
+            c[i] = a[i] + b[i];
+        }
+        else {
+            c[i] = a[i] + b[i] * (T)beta;
+        }
+    }
+} 
 
 void Plus(HUPtr<HUTensor> &a, HUPtr<HUTensor> b, HUPtr<HUTensor> c, float scale)
 {
@@ -909,7 +1050,7 @@ void Plus(HUPtr<HUTensor> &a, HUPtr<HUTensor> b, HUPtr<HUTensor> c, float scale)
 	//if(a->shape() != b->shape())
 	//	broadcast = true;
 
-	 KernelADD<<<blocks, threads>>>((float*)a->data(), (float*)b->data(), (float*)c->data(), length, scale);
+	KernelADD<TT_DATA_TYPE><<<blocks, threads>>>(a->data(), b->data(), c->data(), length, scale);
 }
 
 /*extern "C" __global__ void gElementPlus(float* a, float* b, float* c, int size) {
@@ -919,6 +1060,7 @@ void Plus(HUPtr<HUTensor> &a, HUPtr<HUTensor> b, HUPtr<HUTensor> c, float scale)
         c[i] = a[i] + b[i];
 }*/
 
+/*
 extern "C" __global__ void gElementPlus(Functional::HUTensor<float> ga, Functional::HUTensor<float> gb, Functional::HUTensor<float> gc, bool broadcast)
 {
 	int length = ga.shape().elements();
@@ -942,13 +1084,43 @@ extern "C" __global__ void gElementPlus(Functional::HUTensor<float> ga, Function
       		ga[indices[0]] = gb[indices[1]] + gc[indices[2]];
     	}
   	}
-}
+} */
+
+template <typename T>
+__global__ 
+void gElementPlus(Functional::HUTensor<T> ga, 
+                  Functional::HUTensor<T> gb, 
+                  Functional::HUTensor<T> gc, 
+                  bool broadcast)
+{
+    int length = ga.shape().elements();
+    int indices[3];
+    int dims[4];
+    for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+        int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+        if(index < length) {
+            //indices.fill(index);
+            for(int i=0; i<3; i++)
+                indices[i] = index;
+
+            if(broadcast) {
+                ga.shape().dims(index, dims);
+                //for(int i = 1; i < 3; ++i)
+                //indices[i] = tensors[i].shape().bindex(dims);
+                indices[1] = gb.shape().bindex(dims);
+                indices[2] = gc.shape().bindex(dims);
+            }
+
+            ga[indices[0]] = gb[indices[1]] + gc[indices[2]];
+        }
+    }
+} 
 
 void PlusBroadcast(HUPtr<HUTensor> &a, HUPtr<HUTensor> b, HUPtr<HUTensor> c)
 {
-	Functional::HUTensor<float> ga(a);
-	Functional::HUTensor<float> gb(b);
-	Functional::HUTensor<float> gc(c);
+	Functional::HUTensor<TT_DATA_TYPE> ga(a);
+	Functional::HUTensor<TT_DATA_TYPE> gb(b);
+	Functional::HUTensor<TT_DATA_TYPE> gc(c);
 	
 	cudaSetDevice(a->getDeviceId().no);
 	int length = a->size();
@@ -959,12 +1131,13 @@ void PlusBroadcast(HUPtr<HUTensor> &a, HUPtr<HUTensor> b, HUPtr<HUTensor> c)
     if(a->shape() != b->shape() || a->shape() != c->shape())
 		broadcast = true;
 
-	gElementPlus<<<blocks, threads>>>(ga, gb, gc, broadcast);
+	gElementPlus<TT_DATA_TYPE><<<blocks, threads>>>(ga, gb, gc, broadcast);
 #ifndef CUDA_DEBUG
 	cudaStreamSynchronize(0);
 #endif
 }
 
+/*
 extern "C" __global__ void gElementGelu(Functional::HUTensor<float> out, Functional::HUTensor<float> in)
 {
     int length = out.shape().elements();
@@ -978,7 +1151,27 @@ extern "C" __global__ void gElementGelu(Functional::HUTensor<float> out, Functio
 #endif
         }
     }
-}
+} */
+
+template <typename T>
+__global__ 
+void gElementGelu(Functional::HUTensor<T> out, 
+                  Functional::HUTensor<T> in)
+{
+    int length = out.shape().elements();
+    for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+        int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+        if(index < length) {
+            float tmp = in[index];
+#ifdef FAST_GELU
+            out[index] = (T)(0.5f * tmp * (1.0f + tanhf((0.7978845608028654f * (tmp + \
+                                    0.044715f * tmp * tmp * tmp)))));
+#else
+            out[index] = (T)(0.5f * tmp * (1.0f + erf(tmp / sqrtf(2.0f))));
+#endif
+        }
+    }
+} 
 
 /*
 __inline__ __device__
@@ -996,6 +1189,28 @@ T gelu(T x)
   return x * cdf;
 } */
 
+template <typename T>
+__inline__ __device__
+T gelu(T x)
+{
+  float cdf = 0.5f * (1.0f + tanhf((0.7978845608028654f * (x + 0.044715f * x * x * x))));
+  return x * cdf;
+}
+
+template <>
+__inline__ __device__
+half2 gelu(half2 val)
+{
+  half2 val_pow3 = __hmul2(val, __hmul2(val, val));
+  float2 tmp_pow = __half22float2(val_pow3);
+  float2 tmp =  __half22float2(val);
+
+  tmp.x = 0.5f * (1.0f + tanhf((0.7978845608028654f * (tmp.x + 0.044715f * tmp_pow.x))));
+  tmp.y = 0.5f * (1.0f + tanhf((0.7978845608028654f * (tmp.y + 0.044715f * tmp_pow.y))));
+  return __hmul2(val, __float22half2_rn(tmp));
+}
+
+/*
 extern "C" __global__ void gElementRelu(Functional::HUTensor<float> out, Functional::HUTensor<float> in)
 {
     int length = out.shape().elements();
@@ -1005,8 +1220,23 @@ extern "C" __global__ void gElementRelu(Functional::HUTensor<float> out, Functio
             out[index] = in[index] > 0.f ? in[index] : 0.f;
         }
     }
+} */
+
+template <typename T>
+__global__ 
+void gElementRelu(Functional::HUTensor<T> out, 
+                  Functional::HUTensor<T> in)
+{
+    int length = out.shape().elements();
+    for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+        int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+        if(index < length) {
+            out[index] = in[index] > (T)0.f ? in[index] : (T)0.f;
+        }
+    }
 }
 
+/*
 extern "C" __global__ void gElementSwish(Functional::HUTensor<float> out, Functional::HUTensor<float> in)
 {    int length = out.shape().elements();
     for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
@@ -1017,32 +1247,52 @@ extern "C" __global__ void gElementSwish(Functional::HUTensor<float> out, Functi
 			out[index] = in[index] * sigmoid;
         }    
 	}
-}
+} */
+
+template <typename T>
+__global__ void gElementSwish(Functional::HUTensor<T> out, 
+                              Functional::HUTensor<T> in)
+{    
+    int length = out.shape().elements();
+    for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+        int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+        if(index < length) {
+            //out[index] = in[index] > 0.f ? in[index] : 0.f;
+
+            float tmp = (float)in[index];
+            float sigmoid = tmp > 0.f ? (1.f / (1.f + expf(-tmp))) : (expf(tmp) / (1.f + expf(tmp)));
+            out[index] = (T)(tmp * sigmoid);
+        }    
+    }
+} 
 
 // gelu: a = 0.5b * (1.0 + erf(b / sqrt(2.0)))
 void GeluOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in)
 {
-    Functional::HUTensor<float> gin(in);
-    Functional::HUTensor<float> gout(out);
+    Functional::HUTensor<TT_DATA_TYPE> gin(in);
+    Functional::HUTensor<TT_DATA_TYPE> gout(out);
 
     cudaSetDevice(in->getDeviceId().no);
     int length = in->size();
     int threads = std::min(MAX_THREADS, length);
     int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
-    gElementGelu<<<blocks, threads>>>(gout, gin);
+    gElementGelu<TT_DATA_TYPE><<<blocks, threads>>>(gout, gin);
+
+#ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
+#endif
 }
 
 void ReluOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in)
 {
-	Functional::HUTensor<float> gin(in);
-	Functional::HUTensor<float> gout(out);
+	Functional::HUTensor<TT_DATA_TYPE> gin(in);
+	Functional::HUTensor<TT_DATA_TYPE> gout(out);
 
 	cudaSetDevice(in->getDeviceId().no);
 	int length = in->size();
 	int threads = std::min(MAX_THREADS, length);
 	int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
-	gElementRelu<<<blocks, threads>>>(gout, gin);
+	gElementRelu<TT_DATA_TYPE><<<blocks, threads>>>(gout, gin);
 #ifndef CUDA_DEBUG
 	cudaStreamSynchronize(0);
 #endif
@@ -1050,20 +1300,21 @@ void ReluOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in)
 
 void SwishOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in)
 {
-	Functional::HUTensor<float> gin(in);
-    Functional::HUTensor<float> gout(out);
+	Functional::HUTensor<TT_DATA_TYPE> gin(in);
+    Functional::HUTensor<TT_DATA_TYPE> gout(out);
 
     cudaSetDevice(in->getDeviceId().no);
     int length = in->size();
     int threads = std::min(MAX_THREADS, length);
     int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
-    gElementSwish<<<blocks, threads>>>(gout, gin);
+    gElementSwish<TT_DATA_TYPE><<<blocks, threads>>>(gout, gin);
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
 #endif
 }
 
-extern "C" __global__ void gElementNeg(Functional::HUTensor<float> ga, Functional::HUTensor<float> gb)
+/*
+extern "C" __global__ void gElementNeg(Functional::HUTensor<TT_DATA_TYPE> ga, Functional::HUTensor<TT_DATA_TYPE> gb)
 {
     int length = ga.shape().elements();
     for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
@@ -1074,38 +1325,65 @@ extern "C" __global__ void gElementNeg(Functional::HUTensor<float> ga, Functiona
     }   
 }
 
+
 void NegOP(HUPtr<HUTensor> &a, HUPtr<HUTensor> b)
 {
 	cudaSetDevice(a->getDeviceId().no);
 
-	Functional::HUTensor<float> ga(a);
-	Functional::HUTensor<float> gb(b);
+	Functional::HUTensor<TT_DATA_TYPE> ga(a);
+	Functional::HUTensor<TT_DATA_TYPE> gb(b);
 	int length = a->size();
 	int threads = std::min(MAX_THREADS, length);
 	int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-	gElementNeg<<<blocks, threads>>>(ga, gb);
+	gElementNeg<TT_DATA_TYPE><<<blocks, threads>>>(ga, gb);
+}
+*/
+
+template <typename T>
+__global__ 
+void gElementNeg(T* a, 
+                 const T* b,
+                 const int length)
+{
+    for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+        int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+        if(index < length) {
+            a[index] = - b[index];
+        }   
+    }   
 }
 
-template <bool add>
-__global__ void gTranspose0213(float* out,
-                               const float* in,
-                               int rows,
-                               int cols,
-                               int stride1,
-                               int stride2) {
+void NegOP(HUPtr<HUTensor> &a, HUPtr<HUTensor> b)
+{
+    cudaSetDevice(a->getDeviceId().no);
+    int length = b->shape().elements();
+    int threads = std::min(MAX_THREADS, length);
+    int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
+    gElementNeg<TT_DATA_TYPE><<<blocks, threads>>>(a->data(), b->data(), length);
+}
+
+template <bool add, typename T>
+__global__ 
+void gTranspose0213(T* out, 
+                    const T* in, 
+                    int rows, 
+                    int cols, 
+                    int stride1, 
+                    int stride2) 
+{
   int stride = stride1 * stride2;
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* rowOut = out + j * cols;
+      T* rowOut = out + j * cols;
 
       int z = j / stride;
       int y = (j % stride) / stride1;
       int x = (j % stride) % stride1;
       int j2 = z * stride + x * stride2 + y;
 
-      const float* rowIn = in + j2 * cols;
+      const T* rowIn = in + j2 * cols;
 
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int i = tid + threadIdx.x;
@@ -1148,11 +1426,38 @@ __global__ void gTransposeND(
 }
 */
 
-template <bool add>
-__global__ void gTransposeND(
-    Functional::HUTensor<float> out,
-    const Functional::HUTensor<float> in,
-    const Functional::Array<int, 4> permute) {
+/*
+template <bool add, typename T>
+__global__ 
+void gTransposeND(T* out, 
+                  const T* in, 
+                  const Functional::Array<int, 4> permute, 
+                  const int length) 
+{
+  //size_t N = 4;
+  Functional::Array<int, 4> oDims;
+  Functional::Array<int, 4> pDims;
+
+  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+    if(index < length) {
+      out.shape().dims(index, oDims);
+      for(int i = 0; i < 4; ++i)
+        pDims[permute[i]] = oDims[i];
+      if(add)
+        out[index] += in[pDims];
+      else
+        out[index] = in[pDims];
+    }
+  }
+} */
+
+template <bool add, typename T>
+__global__ 
+void gTransposeND(Functional::HUTensor<T> out, 
+                  const Functional::HUTensor<T> in, 
+                  const Functional::Array<int, 4> permute) 
+{
   //size_t N = 4;
   Functional::Array<int, 4> oDims;
   Functional::Array<int, 4> pDims;
@@ -1186,7 +1491,7 @@ void TransposeND(HUPtr<HUTensor> &out, HUPtr<HUTensor> in, const std::vector<int
     	int stride1 = out->shape()[-2];
     	int stride2 = out->shape()[-3];
 
-    	gTranspose0213<false><<<blocks, threads>>>(out->data(), in->data(), rows, cols, stride1, stride2);
+    	gTranspose0213<false, TT_DATA_TYPE><<<blocks, threads>>>(out->data(), in->data(), rows, cols, stride1, stride2);
   	}
 	else {
     /*int axes[4];
@@ -1225,10 +1530,9 @@ void TransposeND(HUPtr<HUTensor> &out, HUPtr<HUTensor> in, const std::vector<int
 
     int length = out->shape().elements();
     int threads = std::min(MAX_THREADS, length);
-    int blocks
-        = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
+    int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-    gTransposeND<false><<<blocks, threads>>>(out, in, axes);
+    gTransposeND<false, TT_DATA_TYPE><<<blocks, threads>>>(out, in, axes);
   }
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
@@ -1236,9 +1540,9 @@ void TransposeND(HUPtr<HUTensor> &out, HUPtr<HUTensor> in, const std::vector<int
 }
 
 //C= alpha*A*B + beta*C 
-void Prod(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUTensor> & B, bool transA, bool transB, float beta, float scalar) {
+void Prod(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUTensor> & B, bool transA, bool transB, float beta, float alpha) {
   cudaSetDevice(C->getDeviceId().no);
-  float alpha = scalar;
+  // float alpha = scalar;
 
   size_t m = A->shape().elements() / A->shape().back();
   size_t k = A->shape().back();
@@ -1265,7 +1569,8 @@ void Prod(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUTensor> &
 #if CUDA_VERSION >= 9000
   cublasSetMathMode(cublasHandle, CUBLAS_TENSOR_OP_MATH);
 #endif
-  
+ 
+  /*
   cublasSgemm(cublasHandle,
               opB,
               opA,
@@ -1280,18 +1585,63 @@ void Prod(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUTensor> &
               &beta,
               C->data(),
               ldc);
+  */
 
+  cudaDataType_t BType, AType, CType;
+  cudaDataType_t computeType;
+  int cublasAlgo;
+  if (sizeof(TT_DATA_TYPE) == sizeof(half))  // fp16 
+  {
+      BType = CUDA_R_16F;
+      AType = CUDA_R_16F;
+      CType = CUDA_R_16F;
+      computeType = CUDA_R_16F;
+      cublasAlgo = CUBLAS_GEMM_DEFAULT_TENSOR_OP;
+      // cublasAlgo = CUBLAS_GEMM_DEFAULT;
+  } 
+  else  // fp32, and others data type
+  {
+      BType = CUDA_R_32F;
+      AType = CUDA_R_32F;
+      CType = CUDA_R_32F;
+      computeType = CUDA_R_32F;
+      cublasAlgo = CUBLAS_GEMM_DEFAULT;
+  }
+
+  TT_DATA_TYPE alpha_ = (TT_DATA_TYPE)alpha;
+  TT_DATA_TYPE beta_ = (TT_DATA_TYPE)beta;
+  cublasGemmEx(cublasHandle, 
+               opB, 
+               opA, 
+               n, 
+               m, 
+               k, 
+               &alpha_, 
+               B->data(), BType, ldb, 
+               A->data(), AType, lda, 
+               &beta_, 
+               C->data(), CType, ldc, 
+               computeType, 
+               static_cast<cublasGemmAlgo_t>(cublasAlgo));
+
+  // FP16
   /*
   cublasGemmEx(cublasHandle,
-		  opB, opA,
-		  n, m, k,
-		  &alpha,
-		  B->data(), CUDA_R_32F, n, 
-		  A->data(), CUDA_R_32F, k, 
-		  &beta,
-		  C->data(), CUDA_R_32F, n,
-		  CUDA_R_32F, 
-		  CUBLAS_GEMM_ALGO0);
+               opB,
+               opA,
+               n,
+               m,
+               k,
+               &alpha,
+               B->data(), CUDA_R_16F,
+               ldb,
+               A->data(), CUDA_R_16F,
+               lda,
+               &beta,
+               C->data(), CUDA_R_16F,
+               ldc,
+               CUDA_R_16F,
+               CUBLAS_GEMM_DEFAULT_TENSOR_OP);
   */
 
   /*
@@ -1306,6 +1656,7 @@ void Prod(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUTensor> &
                 computeType,
                 static_cast<cublasGemmAlgo_t>(algo));
   */
+
 #if CUDA_VERSION >= 9000
   cublasSetMathMode(cublasHandle, CUBLAS_DEFAULT_MATH);
 #endif
@@ -1327,32 +1678,53 @@ __global__ void gAddBias_V2(float* out,
   }
 } */
 
-
-__global__ void gElementAddBiasGelu(float* out,
-                                    const float* bias,
-                                    size_t length,
-                                    size_t cols) {
-  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
-    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
-    if(index < length) {
-      // size_t index2 = index % cols;
-      // out[index] += bias[index2];
-      float addBias = out[index] + bias[index % cols];
-      out[index] = 0.5f * addBias * (1.0f + erf(addBias / sqrtf(2.0f))); 
-    }
-  }
-}
-
-__global__ void gElementAddBiasRelu_V2(float* out,
-                                       const float* bias,
-                                       size_t length,
-                                       size_t cols) 
+template <typename T>
+__global__ 
+void gElementAddBiasGelu(T* out, 
+                         const T* bias, 
+                         size_t length, 
+                         size_t cols) 
 {
   for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
     int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
     if(index < length) {
-      float addBias = out[index] + bias[index % cols];
-      out[index] = addBias > 0.f ? addBias : 0.f;
+      float addBias = (float)out[index] + (float)bias[index % cols];
+      out[index] = (T)( 0.5f * addBias * (1.0f + erf(addBias / sqrtf(2.0f))) ); 
+    }
+  }
+}
+
+/*
+template <>
+__global__
+void gElementAddBiasGelu(half* out, 
+                         const half* __restrict bias, 
+                         int m, 
+                         int n)
+{
+  half2* out_ptr = (half2*) out;
+  const half2* bias_ptr = (half2*) bias;
+
+  for(int id = blockIdx.x * blockDim.x + threadIdx.x; id < m * n; id += blockDim.x * gridDim.x)
+  {
+    half2 reg_bias = __ldg(&bias_ptr[id % n]);
+    half2 val = out_ptr[id] + reg_bias;
+    out_ptr[id] = gelu(val);
+  }
+} */
+
+template <typename T>
+__global__ 
+void gElementAddBiasRelu_V2(T* out, 
+                            const T* bias, 
+                            size_t length, 
+                            size_t cols) 
+{
+  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+    if(index < length) {
+      T addBias = out[index] + bias[index % cols];
+      out[index] = addBias > (T)0.f ? addBias : (T)0.f;
     }
   }
 }
@@ -1364,34 +1736,56 @@ void gElementAddBiasRelu(T* out, const T* __restrict bias, int m, int n)
   for(int id = blockIdx.x * blockDim.x + threadIdx.x; id < m * n; id += blockDim.x * gridDim.x)
   {
     T val = out[id] + __ldg(&bias[id % n]);
-    out[id] = (T)(val > 0.0f ? val : 0.0f);
+    out[id] = val > (T)0.0f ? val : (T)0.0f;
   }
 }
 
-__global__ void gElementAddBiasSwish(float* out,
-                                     const float* bias,
-                                     size_t length,
-                                     size_t cols) {
-  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
-    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
-    if(index < length) {
-      float addBias = out[index] + bias[index % cols];
-      float sigmoid = addBias > 0 ? (1.f / (1.f + expf(-addBias))) : (expf(addBias) / (1.f + expf(addBias)));
-      out[index] = addBias * sigmoid;
-    }
+template <>
+__global__
+void gElementAddBiasRelu(half* out, const half* __restrict bias, int m, int n)
+{
+  half2* out_ptr = (half2*) out;
+  const half2* bias_ptr = (half2*) bias;
+
+  for(int id = blockIdx.x * blockDim.x + threadIdx.x; id < m * n; id += blockDim.x * gridDim.x)
+  {
+    half2 reg_bias = __ldg(&bias_ptr[id % n]);
+    half2 val = out_ptr[id] + reg_bias;
+    val.x = val.x > (half)0.0f ? val.x : (half)0.0f;
+    val.y = val.y > (half)0.0f ? val.y : (half)0.0f;
+    out_ptr[id] = val;
   }
 }
 
-__global__ void gAddBias_V2(float* out,
-                            const float* bias,
-                            size_t length,
-                            size_t cols)
+template <typename T>
+__global__ 
+void gElementAddBiasSwish(T* out, 
+                          const T* bias, 
+                          size_t length, 
+                          size_t cols) 
 {
   for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
     int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
     if(index < length) {
-      size_t index2 = index % cols;
-      out[index] += bias[index2];
+      float addBias = (float)out[index] + (float)bias[index % cols];
+      float sigmoid = addBias > 0 ? (1.f / (1.f + expf(-addBias))) : (expf(addBias) / (1.f + expf(addBias)));
+      out[index] = (T)(addBias * sigmoid);
+    }
+  }
+}
+
+template <typename T>
+__global__ 
+void gAddBias_V2(T* out, 
+                 const T* bias, 
+                 size_t length, 
+                 size_t cols)
+{
+  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x) {
+    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+    if(index < length) {
+      // size_t index2 = index % cols;
+      out[index] += bias[index % cols];
     }
   }
 }
@@ -1406,7 +1800,7 @@ void AddBias_V2(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
 	int threads = std::min(MAX_THREADS, length);
 	int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-	gAddBias_V2<<<blocks, threads>>>(C->data(), bias->data(), length, cols);
+	gAddBias_V2<TT_DATA_TYPE><<<blocks, threads>>>(C->data(), bias->data(), length, cols);
 #ifndef CUDA_DEBUG
 	cudaStreamSynchronize(0);
 #endif
@@ -1422,13 +1816,28 @@ void gAddBias(T* out, const T* __restrict bias, int m, int n)
   }
 }
 
+template <>
+__global__
+void gAddBias(half* out, const half* __restrict bias, int m, int n)
+{
+  half2* out_ptr = (half2*) out;
+  const half2* bias_ptr = (half2*) bias;
+
+  for(int id = blockIdx.x * blockDim.x + threadIdx.x; id < m * n; id += blockDim.x * gridDim.x)
+  {
+    half2 reg_bias = __ldg(&bias_ptr[id % n]);
+    half2 val = out_ptr[id] + reg_bias;
+    out_ptr[id] = val;
+  }
+}
+
 void AddBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
 {
     cudaSetDevice(C->getDeviceId().no);
 
     int m = C->shape().elements() / C->shape()[-1]; 
     int n = bias->shape().elements();
-    const int data_type_factor = 4 / sizeof(float); // for fp32
+    const int data_type_factor = 4 / sizeof(TT_DATA_TYPE); // for fp32
     dim3 block, grid;
     if(n / 4 / data_type_factor <= 1024)
     {
@@ -1441,7 +1850,7 @@ void AddBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
         grid.x = ceil(m * n / 1024.);
     }
 
-    gAddBias<float><<<grid, block, 0>>>(C->data(), bias->data(), m, n / data_type_factor);
+    gAddBias<TT_DATA_TYPE><<<grid, block, 0>>>(C->data(), bias->data(), m, n / data_type_factor);
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
 #endif
@@ -1457,7 +1866,7 @@ void AddBiasGeluOP(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
 	int threads = std::min(MAX_THREADS, length);
 	int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-	gElementAddBiasGelu<<<blocks, threads>>>(C->data(), bias->data(), length, cols);
+	gElementAddBiasGelu<TT_DATA_TYPE><<<blocks, threads>>>(C->data(), bias->data(), length, cols);
 #ifndef CUDA_DEBUG
 	cudaStreamSynchronize(0);
 #endif
@@ -1485,7 +1894,7 @@ void AddBiasReluOP(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
 
     int m = C->shape().elements() / C->shape()[-1];
     int n = bias->shape().elements();
-    const int data_type_factor = 4 / sizeof(float); // for fp32
+    const int data_type_factor = 4 / sizeof(TT_DATA_TYPE); // for fp32
     dim3 block, grid;
     if(n / 4 / data_type_factor <= 1024)
     {
@@ -1498,7 +1907,7 @@ void AddBiasReluOP(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
         grid.x = ceil(m * n / 1024.);
     }
 
-    gElementAddBiasRelu<float><<<grid, block, 0>>>(C->data(), bias->data(), m, n / data_type_factor);
+    gElementAddBiasRelu<TT_DATA_TYPE><<<grid, block, 0>>>(C->data(), bias->data(), m, n / data_type_factor);
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
 #endif
@@ -1514,7 +1923,7 @@ void AddBiasSwishOP(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias)
     int threads = std::min(MAX_THREADS, length);
     int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-    gElementAddBiasSwish<<<blocks, threads>>>(C->data(), bias->data(), length, cols);
+    gElementAddBiasSwish<TT_DATA_TYPE><<<blocks, threads>>>(C->data(), bias->data(), length, cols);
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
 #endif
@@ -1530,10 +1939,8 @@ void ProdWithBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUT
 	cudaEventRecord(start, 0);
     */
 	
-
 	Prod(C, A, B, transA, transB, beta, alpha);
 
-	
     /*
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
@@ -1559,10 +1966,9 @@ void ProdWithBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUT
 
 }
 
-void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTensor> B, HUPtr<HUMemPool> mem, bool transA, bool transB, float beta, float scalar)
+void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTensor> B, HUPtr<HUMemPool> mem, bool transA, bool transB, float beta, float alpha)
 {
   cudaSetDevice(C->getDeviceId().no);
-  float alpha = scalar;
 
   size_t batchA = A->shape().elements() / (A->shape()[-1] * A->shape()[-2]);
   size_t batchB = B->shape().elements() / (B->shape()[-1] * B->shape()[-2]);
@@ -1594,9 +2000,9 @@ void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTen
   int strideC = n * m;
   int batchC = std::max(batchA, batchB);
 
-  std::vector<const float*> aptr;
-  std::vector<const float*> bptr;
-  std::vector<float*> cptr;
+  std::vector<const TT_DATA_TYPE*> aptr;
+  std::vector<const TT_DATA_TYPE*> bptr;
+  std::vector<TT_DATA_TYPE*> cptr;
 
   for(int i = 0; i < batchC; i++) {
     aptr.push_back(A->data() + (i % batchA) * strideA);
@@ -1604,20 +2010,22 @@ void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTen
     cptr.push_back(C->data() + i * strideC);
   }
 
-  auto mp_aptr = mem->alloc<const float*>(aptr.size());
+  auto mp_aptr = mem->alloc<const TT_DATA_TYPE*>(aptr.size());
   CudaCopy(
-      aptr.data(), aptr.data() + aptr.size(), mp_aptr->data<const float*>());
+      aptr.data(), aptr.data() + aptr.size(), mp_aptr->data<const TT_DATA_TYPE*>());
 
-  auto mp_bptr = mem->alloc<const float*>(bptr.size());
+  auto mp_bptr = mem->alloc<const TT_DATA_TYPE*>(bptr.size());
   CudaCopy(
-      bptr.data(), bptr.data() + bptr.size(), mp_bptr->data<const float*>());
+      bptr.data(), bptr.data() + bptr.size(), mp_bptr->data<const TT_DATA_TYPE*>());
 
-  auto mp_cptr = mem->alloc<float*>(cptr.size());
-  CudaCopy(cptr.data(), cptr.data() + cptr.size(), mp_cptr->data<float*>());
+  auto mp_cptr = mem->alloc<TT_DATA_TYPE*>(cptr.size());
+  CudaCopy(cptr.data(), cptr.data() + cptr.size(), mp_cptr->data<TT_DATA_TYPE*>());
+
 
 #if CUDA_VERSION >= 9000
   cublasSetMathMode(cublasHandle, CUBLAS_TENSOR_OP_MATH);
 #endif
+  /*
   cublasSgemmBatched(cublasHandle,
                      opB,
                      opA,
@@ -1633,6 +2041,84 @@ void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTen
                      mp_cptr->data<float*>(),
                      ldc,
                      batchC);
+  */
+
+  cudaDataType_t BType, AType, CType;
+  cudaDataType_t computeType;
+  int cublasAlgo;
+  if (sizeof(TT_DATA_TYPE) == sizeof(half))  // fp16 
+  {
+      BType = CUDA_R_16F;
+      AType = CUDA_R_16F;
+      CType = CUDA_R_16F;
+      computeType = CUDA_R_16F;
+      cublasAlgo = CUBLAS_GEMM_DEFAULT_TENSOR_OP;
+  }
+  else  // fp32, and others data type
+  {
+      BType = CUDA_R_32F;
+      AType = CUDA_R_32F;
+      CType = CUDA_R_32F;
+      computeType = CUDA_R_32F;
+      cublasAlgo = CUBLAS_GEMM_DEFAULT;
+  }
+
+  TT_DATA_TYPE alpha_ = (TT_DATA_TYPE)alpha;
+  TT_DATA_TYPE beta_ = (TT_DATA_TYPE)beta;
+  cublasGemmBatchedEx(cublasHandle, 
+                      opB, 
+                      opA,
+                      n,
+                      m,
+                      k,
+                      &alpha_,
+                      mp_bptr->data<const void*>(), BType,
+                      ldb, 
+                      mp_aptr->data<const void*>(), AType, 
+                      lda, 
+                      &beta_, 
+                      mp_cptr->data<void*>(), CType, 
+                      ldc, 
+                      batchC, 
+                      computeType, 
+                      static_cast<cublasGemmAlgo_t>(cublasAlgo));
+ 
+  /*
+  cublasGemmStridedBatchedEx(cublasHandle,
+                             opB, 
+                             opA,
+                             n,
+                             m, 
+                             k, 
+                             &alpha, 
+                             mp_bptr->data<const float*>(), CUDA_R_32F, 
+                             ldb, 
+                             strideB, 
+                             mp_aptr->data<const float*>(), CUDA_R_32F, 
+                             lda, 
+                             strideA, 
+                             &beta, 
+                             mp_cptr->data<float*>(), CUDA_R_32F, 
+                             ldc, 
+                             strideC, 
+                             batchC, 
+                             CUDA_R_32F, 
+                             static_cast<cublasGemmAlgo_t>(CUBLAS_GEMM_DEFAULT));
+   */
+
+  /*
+  cublasGemmStridedBatchedEx(cublas_handle,
+        CUBLAS_OP_T, CUBLAS_OP_N,
+        seq_len, seq_len, size_per_head,
+        &alpha,
+        k_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
+        q_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
+        &beta,
+        qk_buf->data(), CUDA_R_32F, seq_len, seq_len * seq_len,
+        batch_size * head_num,
+        CUDA_R_32F,
+        static_cast<cublasGemmAlgo_t>(CUBLAS_GEMM_DEFAULT)); */
+
 #if CUDA_VERSION >= 9000
   cublasSetMathMode(cublasHandle, CUBLAS_DEFAULT_MATH);
 #endif
@@ -1642,7 +2128,13 @@ void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTen
   mem->free(mp_cptr);
 }
 
-__global__ void gSoftmax(float* out, Functional::HUConstantShape outShape, const float* in, const float* mask, const Functional::HUConstantShape maskShape) {
+template <typename T>
+__global__ 
+void gSoftmax(T* out, 
+              Functional::HUConstantShape outShape, 
+              const T* in, const T* mask, 
+              const Functional::HUConstantShape maskShape) 
+{
   int rows = outShape.elements() / outShape.back();
   int cols = outShape.back();
 
@@ -1653,8 +2145,8 @@ __global__ void gSoftmax(float* out, Functional::HUConstantShape outShape, const
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* so = out + j * cols;
-      const float* sp = in + j * cols;
+      T* so = out + j * cols;
+      const T* sp = in + j * cols;
 
       extern __shared__ float _share[];
 
@@ -1670,11 +2162,12 @@ __global__ void gSoftmax(float* out, Functional::HUConstantShape outShape, const
               outShape.dims(mIndex, dims);
               mIndex = maskShape.bindex(dims);
             }
-            mVal = mask[mIndex];
+            mVal = (float)mask[mIndex];   // convert to fp32
           }
 
-          if(mVal && sp[id] > _max[threadIdx.x])
-            _max[threadIdx.x] = sp[id];
+          float sp_val = (float)sp[id];   // convert to fp32
+          if(mVal && sp_val > _max[threadIdx.x])
+            _max[threadIdx.x] = sp_val;
         }
       }
       __syncthreads();
@@ -1706,13 +2199,14 @@ __global__ void gSoftmax(float* out, Functional::HUConstantShape outShape, const
               outShape.dims(mIndex, dims);
               mIndex = maskShape.bindex(dims);
             }
-            mVal = mask[mIndex];
+            mVal = (float)mask[mIndex];   // convert to fp32
           }
 
           float ex = 0;
+          float sp_val = (float)sp[id];   // convert to fp32
           if(mVal)
-            ex = __expf(sp[id] - max);
-          so[id] = ex;
+            ex = __expf(sp_val - max);
+          so[id] = (T)ex;                 // convert to T
 
           _sum[threadIdx.x] += ex;
         }
@@ -1730,7 +2224,7 @@ __global__ void gSoftmax(float* out, Functional::HUConstantShape outShape, const
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols) {
-          so[id] = so[id] / _sum[0];
+          so[id] = (T)((float)so[id] / _sum[0]);   // convert to T
         }
       }
     }
@@ -1746,35 +2240,40 @@ void SoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> mask)
 
 	int blocks = std::min(MAX_BLOCKS, (int)m);
 	int threads = std::min(MAX_THREADS, (int)k);
-	int shared = sizeof(float) * threads * 2; 
+	// int shared = sizeof(TT_DATA_TYPE) * threads * 2; 
+    int shared = sizeof(float) * threads * 2;
 
 	if(mask)
-		gSoftmax<<<blocks, threads, shared>>>(out->data(), out->shape(), in->data(), mask->data(), mask->shape());
+		gSoftmax<TT_DATA_TYPE><<<blocks, threads, shared>>>(out->data(), out->shape(), in->data(), mask->data(), mask->shape());
 	else 
-		gSoftmax<<<blocks, threads, shared>>>(out->data(), out->shape(), in->data(), 0, out->shape());
+		gSoftmax<TT_DATA_TYPE><<<blocks, threads, shared>>>(out->data(), out->shape(), in->data(), 0, out->shape());
 }
 
-__global__ void gLogSoftmax(float* out,
-                            const Functional::HUConstantShape outShape,
-                            const float* in) {
+template <typename T>
+__global__ 
+void gLogSoftmax(T* out, 
+                 const Functional::HUConstantShape outShape, 
+                 const T* in) 
+{
   int rows = outShape.elements() / outShape.back();
   int cols = outShape.back();
 
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* so = out + j * cols;
-      const float* sp = in + j * cols;
+      T* so = out + j * cols;
+      const T* sp = in + j * cols;
 
       extern __shared__ float _share[];
 
       float* _max = _share + blockDim.x;
-      _max[threadIdx.x] = sp[threadIdx.x];
+      _max[threadIdx.x] = (float)sp[threadIdx.x];    // convert to fp32
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
+        float sp_val = (float)sp[id];  // convert to fp32
         if(id < cols) {
-          if(sp[id] > _max[threadIdx.x])
-            _max[threadIdx.x] = sp[id];
+          if(sp_val > _max[threadIdx.x])
+            _max[threadIdx.x] = sp_val;
         }
       }
       __syncthreads();
@@ -1799,9 +2298,9 @@ __global__ void gLogSoftmax(float* out,
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols) {
-          float sm = sp[id] - max;
+          float sm = (float)sp[id] - max;   // convert to fp32
           float ex = __expf(sm);
-          so[id] = sm;
+          so[id] = (T)sm;                   // convert to T
           _sum[threadIdx.x] += ex;
         }
       }
@@ -1818,8 +2317,149 @@ __global__ void gLogSoftmax(float* out,
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols)
-          so[id] -= __logf(_sum[0]);
+          // so[id] -= __logf(_sum[0]);
+          so[id] = (T)((float)so[id] - __logf(_sum[0]));  // convert to T
       }
+    }
+  }
+}
+
+template <typename T>
+__global__ 
+void gAddBiasLogSoftmax(T* out, 
+                        const Functional::HUConstantShape outShape, 
+                        const T* in, 
+                        const T* bias) 
+{
+  int rows = outShape.elements() / outShape.back();
+  int cols = outShape.back();
+
+  for(int bid = 0; bid < rows; bid += gridDim.x) {
+    int j = bid + blockIdx.x;
+    if(j < rows) {
+      T* so = out + j * cols;
+      const T* sp = in + j * cols;
+
+      extern __shared__ float _share[];
+
+      float* _max = _share + blockDim.x;
+      _max[threadIdx.x] = (float)sp[threadIdx.x] + (float)bias[threadIdx.x]; ////
+      for(int tid = 0; tid < cols; tid += blockDim.x) {
+        int id = tid + threadIdx.x;
+        float total = (float)sp[id] + (float)bias[id];
+        if(id < cols) {
+          if(total > _max[threadIdx.x]) ////
+            _max[threadIdx.x] = total;  ////
+        }
+      }
+      __syncthreads();
+      int len = blockDim.x;
+      while(len != 1) {
+        __syncthreads();
+        int skip = (len + 1) >> 1;
+        if(threadIdx.x < (len >> 1)) {
+          if(_max[threadIdx.x + skip] > _max[threadIdx.x]) {
+            _max[threadIdx.x] = _max[threadIdx.x + skip];
+          }
+        }
+        len = (len + 1) >> 1;
+      }
+      __syncthreads();
+      float max = _max[0];
+      __syncthreads();
+     
+      float* _sum = _share + blockDim.x;
+
+      _sum[threadIdx.x] = 0.0;
+      for(int tid = 0; tid < cols; tid += blockDim.x) {
+        int id = tid + threadIdx.x;
+        if(id < cols) {
+          float sm = (float)sp[id] + (float)bias[id] - max;
+          float ex = __expf(sm);
+          so[id] = (T)sm;            // convert to T
+          _sum[threadIdx.x] += ex;
+        }
+      }
+      __syncthreads();
+      len = blockDim.x;
+      while(len != 1) {
+        __syncthreads();
+        int skip = (len + 1) >> 1;
+        if(threadIdx.x < (len >> 1))
+          _sum[threadIdx.x] += _sum[threadIdx.x + skip];
+        len = (len + 1) >> 1;
+      }
+      __syncthreads();
+      for(int tid = 0; tid < cols; tid += blockDim.x) {
+        int id = tid + threadIdx.x;
+        if(id < cols)
+          // so[id] -= __logf(_sum[0]);
+          so[id] =(T)( (float)so[id] - __logf(_sum[0]) );  // convert to T
+      }
+    }
+  }
+}
+
+template <typename T>
+__global__ 
+void gAddBiasLogSoftmax_V2(T* logits, 
+                           const T* tmp_logits, 
+                           const T* bias, 
+                           const int n, 
+                           const int beam_size, 
+                           const uint8_t* finished)
+{
+  int bid = blockIdx.x;
+  bool finish = (finished != nullptr) ? finished[bid / beam_size] : false;
+  int offset = bid * n;
+  int end_id = (int)EOS_ID; 
+  
+  float max_val = -1 * FLT_MAX;
+  const bool IS_FP16 = std::is_same<T, half>::value;
+  const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+  __shared__ float s_max_val;
+  __shared__ float s_sum_val;
+
+  if(finish)
+  { 
+    for(int tid = threadIdx.x; tid < n; tid += blockDim.x)
+    {
+      logits[offset + tid] = (tid == end_id) ? (T)0.f : -MAX_T_VAL;
+    }
+  }
+  else
+  {  
+    for(int tid = threadIdx.x; tid < n; tid += blockDim.x)
+    {
+      if(finish) {
+        logits[offset + tid] = (tid == end_id) ? MAX_T_VAL : -MAX_T_VAL;
+      }
+      else {
+        logits[offset + tid] = tmp_logits[offset + tid] + bias[tid];
+      }
+      max_val = max(max_val, (float)logits[offset + tid]);
+    }
+
+    max_val = blockReduceMax<float>((float)max_val);
+    if(threadIdx.x == 0)
+      s_max_val = max_val;
+    __syncthreads();
+
+    float sum_val = 0.0f;
+    for(int tid = threadIdx.x; tid < n; tid += blockDim.x)
+    {
+      logits[offset + tid] = (T)(__expf((float)logits[offset + tid] - s_max_val));
+      sum_val += (float)logits[offset + tid];
+    }
+
+    sum_val = blockReduceSum<float>(sum_val);
+    if(threadIdx.x == 0)
+      s_sum_val = sum_val;
+    __syncthreads();
+
+    for(int tid = threadIdx.x; tid < n; tid += blockDim.x)
+    {
+      logits[offset + tid] = (T)(logf((float)logits[offset + tid] / s_sum_val));
     }
   }
 }
@@ -1832,10 +2472,40 @@ void LogSoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in) {
 
   int blocks = std::min(MAX_BLOCKS, (int)m);
   int threads = std::min(MAX_THREADS, (int)k);
-  int shared = sizeof(float) * threads * 2;
+  int shared = sizeof(TT_DATA_TYPE) * threads * 2;
 
-  gLogSoftmax<<<blocks, threads, shared>>>(
+  gLogSoftmax<TT_DATA_TYPE><<<blocks, threads, shared>>>(
       out->data(), out->shape(), in->data());
+}
+
+void AddBiasLogSoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, const HUPtr<HUTensor> bias)
+{
+    cudaSetDevice(out->getDeviceId().no);
+
+    size_t m = out->shape().elements() / out->shape().back();
+    size_t k = out->shape().back();
+
+    int blocks = std::min(MAX_BLOCKS, (int)m);
+    int threads = std::min(MAX_THREADS, (int)k);
+    // int shared = sizeof(TT_DATA_TYPE) * threads * 2;
+    int  shared = sizeof(float) * threads * 2;
+
+    gAddBiasLogSoftmax<TT_DATA_TYPE><<<blocks, threads, shared>>>(
+            out->data(), out->shape(), in->data(), bias->data());
+}
+
+void AddBiasLogSoftmaxOP_V2(HUPtr<HUTensor> out, HUPtr<HUTensor> in, const HUPtr<HUTensor> bias, const int realDimBatch, uint8_t* isAllDone)
+{
+    cudaSetDevice(out->getDeviceId().no);
+    int m = out->shape().elements() / out->shape().back();
+    int n = out->shape().back();
+    int local_beam_size = out->shape()[-3] / realDimBatch;  // if step=0, local_beam_size=1
+
+    dim3 grid(m);
+    dim3 block(std::min(n, 1024));
+    /* n is the vocab_size, e.g., 30000, 7000.... vocab_size is usually very big. */
+    gAddBiasLogSoftmax_V2<TT_DATA_TYPE><<<grid, block, 0>>>(
+            out->data(), in->data(), bias->data(), n, local_beam_size, isAllDone);
 }
 
 __global__ void gLNormalization_v2(float* out, 
@@ -1872,27 +2542,30 @@ __global__ void gLNormalization_v2(float* out,
         (float)(((local_out - s_mean) * rsqrtf(s_variance)) * (float)(__ldg(&gamma[i])) + (float)(__ldg(&beta[i])));
 }
 
-__global__ void gLNormalization(float* out,
-                                const float* in,
-                                const float* alpha,
-                                const float* beta,
-                                int rows,
-                                int cols,
-                                float eps=1e-9) {
+template <typename T>
+__global__ 
+void gLNormalization(T* out, 
+                     const T* in, 
+                     const T* alpha, 
+                     const T* beta, 
+                     int rows, 
+                     int cols, 
+                     float eps=1e-9) 
+{
   extern __shared__ float _share[];
 
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* so = out + j * cols;
-      const float* sp = in + j * cols;
+      T* so = out + j * cols;
+      const T* sp = in + j * cols;
 
       float* _sum = _share + blockDim.x;
       _sum[threadIdx.x] = 0.0f;
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols) {
-          _sum[threadIdx.x] += sp[id];
+          _sum[threadIdx.x] += (float)sp[id];
         }
       }
       __syncthreads();
@@ -1915,7 +2588,7 @@ __global__ void gLNormalization(float* out,
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols) {
-          float ex = sp[id] - mean;
+          float ex = (float)sp[id] - mean;
           _sqSum[threadIdx.x] += ex * ex;
         }
       }
@@ -1935,23 +2608,24 @@ __global__ void gLNormalization(float* out,
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int id = tid + threadIdx.x;
         if(id < cols) {
-          float t = alpha[id] * ((sp[id] - mean) / sigma);
+          float t = (float)alpha[id] * (((float)sp[id] - mean) / sigma);
           if(beta != nullptr)
-            t += beta[id];
-          so[id] = t;
+            t += (float)beta[id];
+          so[id] = (T)t;
         }
       }
     }
   }
 }
 
+template <typename T>
 __global__ 
-void add_bias_input_layer_norm_kernel_generalize(const float* __restrict input, 
-                                                 const float* __restrict bias,
-                                                 const float* __restrict gamma, 
-                                                 const float* __restrict beta, 
-                                                 float* output,
-                                                 float* norm_output, 
+void add_bias_input_layer_norm_kernel_generalize(const T* __restrict input, 
+                                                 const T* __restrict bias,
+                                                 const T* __restrict gamma, 
+                                                 const T* __restrict beta, 
+                                                 T* output,
+                                                 T* norm_output, 
                                                  int m, 
                                                  int n, 
                                                  float eps=1e-9)
@@ -1960,7 +2634,7 @@ void add_bias_input_layer_norm_kernel_generalize(const float* __restrict input,
 
   __shared__ float s_mean;
   __shared__ float s_variance;
-  float mean =  0.0f;
+  float mean = 0.0f;
   float variance = 0.0f;
 
   float local_sum = 0.0f;
@@ -1969,11 +2643,11 @@ void add_bias_input_layer_norm_kernel_generalize(const float* __restrict input,
     float local_out = (float)(__ldg(&input[blockIdx.x * n + i]));
     local_out += (float)(output[blockIdx.x * n + i]);
     local_out += (float)(__ldg(&bias[i]));
-    output[blockIdx.x * n + i] = local_out;
+    output[blockIdx.x * n + i] = (T)local_out;
     local_sum += local_out;
   }
 
-  mean = blockReduceSum(local_sum);
+  mean = blockReduceSum<float>(local_sum);
 
   if(threadIdx.x == 0)
     s_mean = mean / n;
@@ -1985,7 +2659,7 @@ void add_bias_input_layer_norm_kernel_generalize(const float* __restrict input,
     float diff = (float)(__ldg(&output[blockIdx.x * n + i])) - s_mean;
     local_var_sum += diff * diff;
   }
-  variance = blockReduceSum(local_var_sum);
+  variance = blockReduceSum<float>(local_var_sum);
 
   if(threadIdx.x == 0) {
     s_variance = rsqrtf(variance / n + eps);
@@ -1997,22 +2671,24 @@ void add_bias_input_layer_norm_kernel_generalize(const float* __restrict input,
   {
     if (beta != nullptr) {
       norm_output[blockIdx.x * n + i] =
-        (float)((( (float)output[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])) + (float)(__ldg(&beta[i])));
+        (T)((( (float)output[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])) + (float)(__ldg(&beta[i])));
     }
     else {
       norm_output[blockIdx.x * n + i] =
-        (float)((( (float)output[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])));
+        (T)((( (float)output[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])));
     }
   }
 }
 
-__global__ void layer_norm_kernel_generalize(const float* __restrict input, 
-                                             const float* __restrict gamma, 
-                                             const float* __restrict beta, 
-                                             float* output,
-                                             int m, 
-                                             int n,
-                                             float eps=1e-9)
+template <typename T>
+__global__ 
+void layer_norm_kernel_generalize(const T* __restrict input, 
+                                  const T* __restrict gamma, 
+                                  const T* __restrict beta, 
+                                  T* output, 
+                                  int m, 
+                                  int n, 
+                                  float eps=1e-9)
 {
   const int tid = threadIdx.x;
 
@@ -2027,7 +2703,7 @@ __global__ void layer_norm_kernel_generalize(const float* __restrict input,
     local_sum += (float)(__ldg(&input[blockIdx.x * n + i]));
   }
 
-  mean = blockReduceSum(local_sum);
+  mean = blockReduceSum<float>(local_sum);
 
   if(threadIdx.x == 0)
     s_mean = mean / n;
@@ -2039,7 +2715,7 @@ __global__ void layer_norm_kernel_generalize(const float* __restrict input,
     float diff = (float)(__ldg(&input[blockIdx.x * n + i])) - s_mean;
     local_var_sum += diff * diff;
   }
-  variance = blockReduceSum(local_var_sum);
+  variance = blockReduceSum<float>(local_var_sum);
 
   if(threadIdx.x == 0) {
     s_variance = rsqrtf(variance / n + eps);
@@ -2051,11 +2727,11 @@ __global__ void layer_norm_kernel_generalize(const float* __restrict input,
   {
     if (beta != nullptr) {
       output[blockIdx.x * n + i] = 
-        (float)((( (float)input[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])) + (float)(__ldg(&beta[i])));
+        (T)((( (float)input[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])) + (float)(__ldg(&beta[i])));
     }
     else {
       output[blockIdx.x * n + i] = 
-        (float)((( (float)input[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])));
+        (T)((( (float)input[blockIdx.x * n + i] - s_mean) * s_variance) * (float)(__ldg(&gamma[i])));
     }
   }
 }
@@ -2073,9 +2749,10 @@ void AddBiasInputLayerNormalOP(HUPtr<HUTensor> norm_out, HUPtr<HUTensor> out, HU
     if(n % 32 != 0) {
         block.x = 1024;
     }
-    block.x = block.x / (4 / sizeof(float));
+    block.x = block.x / (4 / sizeof(TT_DATA_TYPE)); // if using half, only need half of block.x
 
-    add_bias_input_layer_norm_kernel_generalize<<<grid, block, 0>>>(in->data(), bias->data(), gamma->data(), \ 
+    /* should pay attention to the rsqrt precision*/
+    add_bias_input_layer_norm_kernel_generalize<TT_DATA_TYPE><<<grid, block, 0>>>(in->data(), bias->data(), gamma->data(), \ 
             beta ? beta->data() : nullptr, out->data(), norm_out->data(), m, n, eps);
     // layer_norm_kernel_generalize<T><<<grid, block, 0, stream>>>(input, gamma, beta, output, m, n); // For gpt-3
 }
@@ -2093,10 +2770,12 @@ void LayerNormalOP_V2(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> g
     if(n % 32 != 0) {
         block.x = 1024;
     }
-    block.x = block.x / (4 / sizeof(float));
+    block.x = block.x / (4 / sizeof(TT_DATA_TYPE)); // if using half, only need half of block.x
 
-    /* should pay attention to the rsqrt precision*/
-    layer_norm_kernel_generalize<<<grid, block, 0>>>(in->data(), gamma->data(), beta ? beta->data() : nullptr, out->data(), m, n, eps);
+    /* should pay attention to the rsqrt precision */
+    layer_norm_kernel_generalize<TT_DATA_TYPE><<<grid, block, 0>>>(in->data(), gamma->data(), \ 
+            beta ? beta->data() : nullptr, out->data(), m, n, eps);
+
     // layer_norm_kernel_generalize<T><<<grid, block, 0, stream>>>(input, gamma, beta, output, m, n); // For gpt-3
 }
 
@@ -2109,9 +2788,10 @@ void LayerNormalOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> gamm
 
 	 int blocks = std::min(MAX_BLOCKS, (int)rows);
 	 int threads = std::min(MAX_THREADS, (int)cols);
-	 int shared = 2 * threads * sizeof(float);
+	 int shared = 2 * threads * sizeof(TT_DATA_TYPE);
 
-	 gLNormalization<<<blocks, threads, shared>>>(out->data(), in->data(), gamma->data(), beta ? beta->data() : nullptr, rows, cols, eps);
+	 gLNormalization<TT_DATA_TYPE><<<blocks, threads, shared>>>(out->data(), in->data(), gamma->data(),\ 
+             beta ? beta->data() : nullptr, rows, cols, eps);
 }
 
 void ConcatContOP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& inputs, int axis) {
@@ -2128,7 +2808,7 @@ void ConcatContOP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& inpu
 
       cudaMemcpy(out->data() + offset1,
                  in->data() + offset2,
-                 size * sizeof(float),
+                 size * sizeof(TT_DATA_TYPE),
                  cudaMemcpyDeviceToDevice);
 
       offset1 += size;
@@ -2140,20 +2820,22 @@ void ConcatContOP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& inpu
 #endif
 }
 
-template <bool add>
-__global__ void gInsertCols(float* out,
-                            const float* in,
-                            size_t rows,
-                            size_t cols,
-                            size_t cols_out,
-                            size_t cols_in,
-                            size_t offset_out,
-                            size_t offset_in) {
+template <bool add, typename T>
+__global__ 
+void gInsertCols(T* out, 
+                 const T* in, 
+                 size_t rows, 
+                 size_t cols, 
+                 size_t cols_out, 
+                 size_t cols_in, 
+                 size_t offset_out, 
+                 size_t offset_in) 
+{
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* rowOut = out + j * cols_out + offset_out;
-      const float* rowIn = in + j * cols_in + offset_in;
+      T* rowOut = out + j * cols_out + offset_out;
+      const T* rowIn = in + j * cols_in + offset_in;
 
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int i = tid + threadIdx.x;
@@ -2183,7 +2865,7 @@ void Concatenate1OP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& in
     int blocks = std::min(MAX_BLOCKS, rows);
     int threads = std::min(MAX_THREADS, cols_in);
 
-    gInsertCols<false><<<blocks, threads>>>(
+    gInsertCols<false, TT_DATA_TYPE><<<blocks, threads>>>(
         out->data(), in->data(), rows, cols_in, cols_out, cols_in, offset, 0);
     offset += cols_in;
   }
@@ -2193,20 +2875,23 @@ void Concatenate1OP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& in
 #endif
 }
 
-__global__ void gJoin2(float* out,
-                       size_t rowBatch,
-                       size_t cols,
-                       const float* in1,
-                       size_t inStride1,
-                       const float* in2,
-                       size_t inStride2) {
+template <typename T>
+__global__ 
+void gJoin2(T* out, 
+            size_t rowBatch, 
+            size_t cols, 
+            const T* in1, 
+            size_t inStride1, 
+            const T* in2, 
+            size_t inStride2) 
+{
   int outStride = inStride1 + inStride2;
   int rows = rowBatch * outStride;
 
   for(int bid = 0; bid < rows; bid += gridDim.x) {
     int j = bid + blockIdx.x;
     if(j < rows) {
-      float* rowOut = out + j * cols;
+      T* rowOut = out + j * cols;
 
       int curBatch = j / outStride;
       int curPos = j % outStride;
@@ -2214,8 +2899,8 @@ __global__ void gJoin2(float* out,
       int jIn1 = (curBatch * inStride1) + curPos;
       int jIn2 = (curBatch * inStride2) + curPos - inStride1;
 
-      const float* rowIn1 = in1 + jIn1 * cols;
-      const float* rowIn2 = in2 + jIn2 * cols;
+      const T* rowIn1 = in1 + jIn1 * cols;
+      const T* rowIn2 = in2 + jIn2 * cols;
 
       for(int tid = 0; tid < cols; tid += blockDim.x) {
         int i = tid + threadIdx.x;
@@ -2244,13 +2929,13 @@ void Concatenate2OP(HUPtr<HUTensor> out, HUPtr<HUTensor> in1, HUPtr<HUTensor> in
   int blocks = std::min(MAX_BLOCKS, (int)rows);
   int threads = std::min(MAX_THREADS, (int)cols);
 
-  gJoin2<<<blocks, threads>>>(out->data(),
-                              rowBatch,
-                              cols,
-                              in1->data(),
-                              rowStride1,
-                              in2->data(),
-                              rowStride2);
+  gJoin2<TT_DATA_TYPE><<<blocks, threads>>>(out->data(), 
+                                            rowBatch, 
+                                            cols, 
+                                            in1->data(), 
+                                            rowStride1, 
+                                            in2->data(), 
+                                            rowStride2);
 #ifndef CUDA_DEBUG
   cudaStreamSynchronize(0);
 #endif
@@ -2274,61 +2959,17 @@ void ConcatenateOP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& inp
  * 6. >> context_buf: [batch_size*beam_size, 1, hidden_size] 
  *
  */
-void CrosssAttentionOP(
+void CrossAttentionOP(
         HUPtr<HUTensor> query_buf, const HUPtr<HUTensor> Q_bias, 
         HUPtr<HUTensor> key_cache, const HUPtr<HUTensor> K_bias, 
         HUPtr<HUTensor> value_cache, const HUPtr<HUTensor> V_bias, 
         HUPtr<HUTensor> lengths, HUPtr<HUTensor> context_buf, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, const uint8_t* isAllDone, 
         const int head_num, const int step)
 {
     cudaSetDevice(query_buf->getDeviceId().no);
-
-    // int* isAllDoneDevice = nullptr;
-    int local_beam_size = query_buf->shape()[-3] / isAllDoneCopy.size(); // step=0, local_beam_size=1
-
-/*
-#ifdef DECODER_PADDING_OPTIMIZE
-    std::vector<int> isAllDoneTmp;
-    for (int i = 0; i < isAllDone.size(); i++) {
-        isAllDoneTmp.push_back(isAllDone[i]);
-    }
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDoneTmp.size() * sizeof(int)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDoneTmp.data(), isAllDoneTmp.size() * sizeof(int), cudaMemcpyHostToDevice));
-#endif
-*/
-
-/*
-    int* isAllDoneDevice = nullptr;
-#ifdef DECODER_PADDING_OPTIMIZE
-    std::vector<int> isAllDoneTmp;
-    int repeatedTimes = query_buf->shape()[-3] / isAllDone.size();
-    if (repeatedTimes > 1)
-    {
-        for (int i = 0; i < isAllDone.size(); i++)
-        {
-            for (int j = 0; j < repeatedTimes; j++)
-            {
-                isAllDoneTmp.push_back(isAllDone[i]);
-            }
-        }
-    }
-    else
-    {
-        isAllDoneTmp.insert(isAllDoneTmp.begin(), isAllDone.begin(), isAllDone.end());
-    }
-
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDoneTmp.size() * sizeof(int)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDoneTmp.data(), isAllDoneTmp.size() * sizeof(int), cudaMemcpyHostToDevice));
-#endif
-*/
-
-    /*
-    int batch_size = key_cache->shape()[-3];
-    int seq_len = key_cache->shape()[-2];
-    int size_per_head = key_cache->shape()[-1] / head_num;
-    */
-
+    
+    int local_beam_size = query_buf->shape()[-3] / realDimBatch;  // step=0, local_beam_size=1
     int batch_size = query_buf->shape()[-3];                  // batch*beam_size
     int seq_len = key_cache->shape()[-2];                     // seq_len
     int size_per_head = query_buf->shape()[-1] / head_num;
@@ -2337,22 +2978,11 @@ void CrosssAttentionOP(
     float scalar = 1.f / sqrtf(size_per_head * 1.0f);
     dim3 grid(batch_size * head_num);                         
 
-    // std::cout << "batch_size: " << batch_size << "\tseq_len: " << seq_len << "\tsize_per_head: " << size_per_head << 
-    //     "\thead_num: " << head_num << "\tblock_sz: " << block_sz << std::endl;
-
-    /*
-    for(int i = 0; i < lengths.size(); i++) {
-        std::cout << lengths[i] << " ";
-    } 
-    std::cout << std::endl;
-    */
-
     int cond = size_per_head * ((ATTENION_OPT)? 1:0);
     switch (cond)
     {
       case 32:
-        // std::cout << "case 32 ..." << std::endl;
-        cross_attention_kernel_opt<float, 32, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
+        cross_attention_kernel_opt<TT_DATA_TYPE, 32, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
           query_buf->data(), Q_bias->data(), 
           key_cache->data(), K_bias->data(), 
           value_cache->data(), V_bias->data(), 
@@ -2360,9 +2990,9 @@ void CrosssAttentionOP(
           isAllDone, local_beam_size, 
           batch_size, head_num, step, seq_len, scalar);
         break;
+
       case 64:
-        // std::cout << "case 64 ..." << std::endl;
-        cross_attention_kernel_opt<float, 64, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
+        cross_attention_kernel_opt<TT_DATA_TYPE, 64, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
           query_buf->data(), Q_bias->data(), 
           key_cache->data(), K_bias->data(), 
           value_cache->data(), V_bias->data(), 
@@ -2370,9 +3000,9 @@ void CrosssAttentionOP(
           isAllDone, local_beam_size, 
           batch_size, head_num, step, seq_len, scalar);
         break;
+
       case 128:
-        // std::cout << "case 128 ..." << std::endl;
-        cross_attention_kernel_opt<float, 128, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
+        cross_attention_kernel_opt<TT_DATA_TYPE, 128, block_sz><<<grid, block_sz, sizeof(float)*seq_len>>>(
           query_buf->data(), Q_bias->data(), 
           key_cache->data(), K_bias->data(), 
           value_cache->data(), V_bias->data(), 
@@ -2380,9 +3010,8 @@ void CrosssAttentionOP(
           isAllDone, local_beam_size, 
           batch_size, head_num, step, seq_len, scalar);
         break;
+
       default:
-        // default path
-        std::cout << "case default ..." << std::endl;
         int block_size = 128;
         if(seq_len <= 64) {
           block_size = 64;
@@ -2407,8 +3036,8 @@ void CrosssAttentionOP(
         assert(block_size <= 1024);
         dim3 block(block_size);
 
-        int shared_size = sizeof(float) * (size_per_head + seq_len);
-        cross_attention_kernel<<<grid, block, shared_size>>>(
+        int shared_size = sizeof(TT_DATA_TYPE) * (size_per_head + seq_len);
+        cross_attention_kernel<TT_DATA_TYPE><<<grid, block, shared_size>>>(
           query_buf->data(), Q_bias->data(), 
           key_cache->data(), K_bias->data(), 
           value_cache->data(), V_bias->data(), 
@@ -2416,89 +3045,43 @@ void CrosssAttentionOP(
           isAllDone, local_beam_size, 
           batch_size, head_num, size_per_head, step, seq_len, scalar);
     }
-    // std::cout << "[test]: " << context_buf->data()[0] << std::endl;
 
-/*
-#ifdef DECODER_PADDING_OPTIMIZE
-    CUDA_CHECK(cudaFree(isAllDoneDevice));
-#endif
-*/
-
+#ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
-    // cudaDeviceSynchronize();
+#endif
+    
 }
 
 void MaskedMultiHeadAttentionOP(
         const HUPtr<HUTensor> qkv_buf, const HUPtr<HUTensor> QKV_bias,
         HUPtr<HUTensor> key_cache, HUPtr<HUTensor> value_cache,
         HUPtr<HUTensor> context_buf, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, uint8_t* isAllDone, 
         const int head_num, const int step)
 {
-    Masked_multihead_attention_params<float> params;
+    using DataType = typename std::conditional<sizeof(TT_DATA_TYPE) == 4, float, uint16_t>::type;
+    Masked_multihead_attention_params<DataType> params;
     memset(&params, 0, sizeof(params));
 
-    int local_beam_size = qkv_buf->shape()[-3] / isAllDoneCopy.size(); // step=0, local_beam_size=1
-    /*bool* isAllDoneDevice = nullptr;
-#ifdef DECODER_PADDING_OPTIMIZE
-*/
-    /*
-    std::vector<int> isAllDoneTmp;
-    for (int i = 0; i < isAllDone.size(); i++) {
-        isAllDoneTmp.push_back(isAllDone[i]);
-    }
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDoneTmp.size() * sizeof(int)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDoneTmp.data(), isAllDoneTmp.size() * sizeof(int), cudaMemcpyHostToDevice));
-    */
-    /*
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDone.size() * sizeof(uint8_t)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDone.data(), isAllDone.size() * sizeof(bool), cudaMemcpyHostToDevice));
-#endif
-*/
-
-/*
-    int* isAllDoneDevice = nullptr;
-#ifdef DECODER_PADDING_OPTIMIZE
-    cudaSetDevice(qkv_buf->getDeviceId().no);
-    std::vector<int> isAllDoneTmp;
-    int repeatedTimes = qkv_buf->shape()[-3] / isAllDone.size();
-    if (repeatedTimes > 1)
-    {
-        for (int i = 0; i < isAllDone.size(); i++)
-        {
-            for (int j = 0; j < repeatedTimes; j++)
-            {
-                isAllDoneTmp.push_back(isAllDone[i]);
-            }
-        }
-    }
-    else
-    {   // bool -> int
-        isAllDoneTmp.insert(isAllDoneTmp.begin(), isAllDone.begin(), isAllDone.end());
-    }
-
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDoneTmp.size() * sizeof(int)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDoneTmp.data(), isAllDoneTmp.size() * sizeof(int), cudaMemcpyHostToDevice));
-#endif
-*/
-
-    int hidden_units = qkv_buf->shape()[-1]/3;
+    //// int local_beam_size = qkv_buf->shape()[-3] / isAllDoneCopy.size(); // step=0, local_beam_size=1
+    int local_beam_size = qkv_buf->shape()[-3] / realDimBatch; // step=0, local_beam_size=1
+    int hidden_units = qkv_buf->shape()[-1] / 3;
     int size_per_head = hidden_units / head_num;
 
-    params.q_bias = QKV_bias->data();
-    params.k_bias = QKV_bias->data() + hidden_units;
-    params.v_bias = QKV_bias->data() + 2 * hidden_units;
+    params.q_bias = reinterpret_cast<const DataType *>(QKV_bias->data());
+    params.k_bias = reinterpret_cast<const DataType *>(QKV_bias->data() + hidden_units);
+    params.v_bias = reinterpret_cast<const DataType *>(QKV_bias->data() + 2 * hidden_units);
 
-    params.out = context_buf->data();
+    params.out = reinterpret_cast<DataType *>(context_buf->data());
 
-    params.q = qkv_buf->data();
-    params.k = qkv_buf->data() + hidden_units;
-    params.v = qkv_buf->data() + 2 * hidden_units;
+    params.q = reinterpret_cast<const DataType *>(qkv_buf->data());
+    params.k = reinterpret_cast<const DataType *>(qkv_buf->data() + hidden_units);
+    params.v = reinterpret_cast<const DataType *>(qkv_buf->data() + 2 * hidden_units);
     params.stride = 3 * hidden_units;
     params.finished = isAllDone;
 
-    params.k_cache = key_cache->data();
-    params.v_cache = value_cache->data();
+    params.k_cache = reinterpret_cast<DataType *>(key_cache->data());
+    params.v_cache = reinterpret_cast<DataType *>(value_cache->data());
     // params.batch_size = inference_batch_size;
     params.batch_size = qkv_buf->shape()[-3];
 
@@ -2516,12 +3099,6 @@ void MaskedMultiHeadAttentionOP(
     */
 
     masked_multihead_attention(params);
-
-/*
-#ifdef DECODER_PADDING_OPTIMIZE
-    CUDA_CHECK(cudaFree(isAllDoneDevice));
-#endif
-*/
 }
 
 #define NEW_TRANSPOSE_BATCH_MAJOR 1
@@ -2690,6 +3267,7 @@ __global__ void update_KV_batch_major_cache_kernel(
         const T* __restrict value_src_cache, 
         T* value_tgt_cache, 
         const size_t* beam_ids, 
+        const uint8_t* finished, 
         const int batch_size, 
         const int beam_width, 
         const int size_per_head, 
@@ -2700,6 +3278,9 @@ __global__ void update_KV_batch_major_cache_kernel(
     int bb_id = blockIdx.x;
     int batch_id = bb_id / beam_width;
     int beam_id = bb_id % beam_width;
+
+    //// if(finished[batch_id * beam_width + beam_id]) return; 
+    if(finished != nullptr && finished[batch_id]) return;
 
     const int hidden_dim = size_per_head * gridDim.y;
 
@@ -2752,40 +3333,50 @@ template <typename T>
 void update_KV_batch_major_cache_kernelLauncher(
         T* key_src_cache, T* key_tgt_cache,
         T* value_src_cache, T* value_tgt_cache, 
-        const size_t* beam_ids, const int batch_size, 
-        const int beam_width, const int head_num, 
-        const int size_per_head, const int step, 
-        const int decoder_max_seq_len)
+        const size_t* beam_ids, const uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, 
+        const int head_num, const int size_per_head, 
+        const int step, const int decoder_max_seq_len)
 {
     dim3 grid(batch_size * beam_width, head_num);
     constexpr int block_sz = 128;
 
-    update_KV_batch_major_cache_kernel<float><<<grid, block_sz, 0>>>(
+    update_KV_batch_major_cache_kernel<T><<<grid, block_sz, 0>>>(
         key_src_cache, key_tgt_cache,
         value_src_cache, value_tgt_cache,
-        beam_ids, batch_size, beam_width, 
+        beam_ids, isAllDone, batch_size, beam_width, 
         size_per_head, step, decoder_max_seq_len);
 }
 
 template void update_KV_batch_major_cache_kernelLauncher(
         float* key_src_cache, float* key_tgt_cache,
         float* value_src_cache, float* value_tgt_cache,
-        const size_t* beam_ids, const int batch_size,
-        const int beam_width,  const int head_num,
-        const int size_per_head, const int step,
-        const int decoder_max_seq_len);
+        const size_t* beam_ids, const uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, 
+        const int head_num, const int size_per_head, 
+        const int step, const int decoder_max_seq_len);
+template void update_KV_batch_major_cache_kernelLauncher(
+        half* key_src_cache, half* key_tgt_cache,
+        half* value_src_cache, half* value_tgt_cache,
+        const size_t* beam_ids, const uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, 
+        const int head_num, const int size_per_head, 
+        const int step, const int decoder_max_seq_len);
 
 void UpdateKVBatchMajorCacheOP(
         HUPtr<HUTensor> key_src_cache, HUPtr<HUTensor> key_tgt_cache, 
         HUPtr<HUTensor> value_src_cache, HUPtr<HUTensor> value_tgt_cache, 
-        const std::vector<size_t> &beams_ids, const int batch_size, const int beam_width, 
+        size_t* beams_ids, uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, 
         const int head_num, const int step)
 {
     cudaSetDevice(key_src_cache->getDeviceId().no);
+    /*
     size_t* d_beams_ids;
     CUDA_CHECK(cudaMalloc(&d_beams_ids, beams_ids.size() * sizeof(size_t)));
     CUDA_CHECK(cudaMemcpy(d_beams_ids, beams_ids.data(), 
                 beams_ids.size() * sizeof(size_t), cudaMemcpyHostToDevice));
+    */
 
     const int hidden_units = key_src_cache->shape()[-1];
     const int decoder_max_seq_len = key_src_cache->shape()[-2];
@@ -2794,10 +3385,10 @@ void UpdateKVBatchMajorCacheOP(
     update_KV_batch_major_cache_kernelLauncher(
             key_src_cache->data(), key_tgt_cache->data(), 
             value_src_cache->data(), value_tgt_cache->data(), 
-            d_beams_ids, batch_size, beam_width,
+            beams_ids, isAllDone, batch_size, beam_width,
             head_num, size_per_head, step, decoder_max_seq_len);
 
-    CUDA_CHECK(cudaFree(d_beams_ids));
+    // CUDA_CHECK(cudaFree(d_beams_ids));
 } 
 
 /*
@@ -2840,12 +3431,9 @@ void AddBiasInputOP(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HU
     add_bias_input_kernelLauncher(output->data(), bias->data(), input->data(), m, n);
 } */
 
+template <typename T> 
 __global__
-void gAddBiasInput(float* out,
-                   const float* bias,
-                   const float* input,
-                   size_t length,
-                   size_t cols)
+void gAddBiasInput(T* out, const T* bias, const T* input, size_t length, size_t cols)
 {
   for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x)
   { 
@@ -2859,6 +3447,25 @@ void gAddBiasInput(float* out,
   }
 }
 
+template <>
+__global__
+void gAddBiasInput(half* out, const half* bias, const half* input, size_t length, size_t cols)
+{
+  for(int bid = 0; bid < length; bid += blockDim.x * gridDim.x)
+  {
+    int index = bid + blockDim.x * blockIdx.x + threadIdx.x;
+    if(index < length)
+    {
+      // size_t index2 = index % cols;
+      // out[index] += bias[index2];
+      out[index] = out[index] + bias[index % cols] + input[index];
+    }
+  }
+}
+
+// template void gAddBiasInput<float>(float* out, const float* bias, const float* input, size_t length, size_t cols);
+// template void gAddBiasInput<half>(half* out, const half* bias, const half* input, size_t length, size_t cols);
+
 void AddBiasInputOP(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input)
 {
     cudaSetDevice(output->getDeviceId().no);
@@ -2869,11 +3476,16 @@ void AddBiasInputOP(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HU
     int threads = std::min(MAX_THREADS, length);
     int blocks = std::min(MAX_BLOCKS, length / threads + (length % threads != 0));
 
-    gAddBiasInput<<<blocks, threads>>>(output->data(), bias->data(), input->data(), length, cols);
+    gAddBiasInput<TT_DATA_TYPE><<<blocks, threads>>>(output->data(), bias->data(), input->data(), length, cols);
+    // gAddBiasInput<half><<<blocks, threads>>>(output->data(), bias->data(), input->data(), length, cols);
+    // gAddBiasInput<T><<<blocks, threads>>>(output->data(), bias->data(), input->data(), length, cols);
 #ifndef CUDA_DEBUG
     cudaStreamSynchronize(0);
 #endif
-}
+} 
+
+// template void AddBiasInputOP<float>(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input);
+// template void AddBiasInputOP<half>(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input);
 
 /*
 template void update_KV_batch_major_cache_kernelLauncher(
@@ -3065,10 +3677,12 @@ void embedding_lookup_sine_position_encoding_kernel_launcher(
               position_encoding, word_ids, batch_size, hidden_units, isScale);
   }
 
+/*
 template 
 void embedding_lookup_sine_position_encoding_kernel_launcher(
         float* from_tensor, const float* embedding_table, const float* position_encoding, 
         const size_t* word_ids, const int batch_size, const int hidden_units, bool isScale);
+*/
 
 
 ////////////////// for Decoder Lookup table //////////////
@@ -3143,6 +3757,16 @@ void start_id_embedding_position_lookups_kernel_launcher(float* from_tensor,
                                                          const int batch_size,
                                                          const int hidden_units, 
                                                          bool isScale);
+template
+void start_id_embedding_position_lookups_kernel_launcher(half* from_tensor,
+                                                         const half* embedding_table,
+                                                         const half* pos_table,
+                                                         const size_t* word_ids,
+                                                         const int length,
+                                                         const int batch_size,
+                                                         const int hidden_units,
+                                                         bool isScale);
+
 
 void StartIdEmbeddingLookUpPositionEncodingOP(HUPtr<HUTensor> &output, const HUPtr<HUTensor> word_emb, const HUPtr<HUTensor> pos_emb, const std::vector<size_t> &word_ids, const int batch_size, bool isScale)
 {
@@ -3304,8 +3928,6 @@ void add_QKV_bias_transpose_kernelLauncher(
       add_QKV_bias<T><<<grid, block, 0>>>(Q, bias_Q, K, bias_K, V, bias_V, q_buf, k_buf, v_buf,
         batch_size, seq_len, head_num, size_per_head, word_per_block);
     }
-    // TODO [half]
-    /*
     else
     {
       const int word_per_block = 1;
@@ -3316,7 +3938,7 @@ void add_QKV_bias_transpose_kernelLauncher(
 
       add_QKV_bias<T><<<grid, block, 0>>>(Q, bias_Q, K, bias_K, V, bias_V, q_buf, k_buf,
       v_buf, batch_size, seq_len, head_num, size_per_head / 2, word_per_block);
-    } */
+    }
   }
   else
   {
@@ -3343,8 +3965,6 @@ void add_QKV_bias_transpose_kernelLauncher(
         batch_size, seq_len, head_num, size_per_head, word_per_block);
 
     }
-    // TODO [half]
-    /*
     else
     {
       const int m = batch_size * seq_len;
@@ -3371,7 +3991,7 @@ void add_QKV_bias_transpose_kernelLauncher(
                                                           (const half2*)V, (const half2*)bias_V,
                                                           (half2*)q_buf, (half2*)k_buf, (half2*)v_buf,
                                                           batch_size, seq_len, head_num, size_per_head / 2, word_per_block);
-    } */
+    }
   }
 }
 
@@ -3382,6 +4002,14 @@ template void add_QKV_bias_transpose_kernelLauncher(
         float* K, const float* bias_K, 
         float* V, const float* bias_V, 
         const int batch_size, const int seq_len, 
+        const int head_num, const int size_per_head);
+
+template void add_QKV_bias_transpose_kernelLauncher(
+        half* q_buf, half* k_buf, half* v_buf,
+        half* Q, const half* bias_Q,
+        half* K, const half* bias_K,
+        half* V, const half* bias_V,
+        const int batch_size, const int seq_len,
         const int head_num, const int size_per_head);
 
 template<typename T>
@@ -3695,7 +4323,7 @@ void attn_softmax_kernelLauncher(
     else{
       if (sizeof(T) == 2){
         block.x = (seq_len/2 + 31)/32*32;
-        softmax_kernel_v3<<<grid, block, 0>>>(buffer, attr_mask, batch_size, head_num, seq_len, scalar);
+        softmax_kernel_v3<T><<<grid, block, 0>>>(buffer, attr_mask, batch_size, head_num, seq_len, scalar);
       }
       else{
         // std::cout << "[softmax_kernel_v3]" << std::endl;
@@ -3709,13 +4337,23 @@ void attn_softmax_kernelLauncher(
 }
 
 //////  3. attn_softmax_kernelLauncher //////
+
 template void attn_softmax_kernelLauncher(
     float* buffer,
     const float* attr_mask,
     const int batch_size,
     const int seq_len,
     const int head_num,
-    const float scalar);
+    const float scalar); 
+
+template void attn_softmax_kernelLauncher(
+    half* buffer,
+    const half* attr_mask,
+    const int batch_size,
+    const int seq_len,
+    const int head_num,
+    const half scalar); 
+
 
 template<typename T>
 __global__
@@ -3947,13 +4585,36 @@ void EncoderUnFusedSelfAttentionOP(
 {
     cudaSetDevice(q_tmp->getDeviceId().no);
 
-    auto cublas_handle = q_tmp->getDevice()->getCublasHandle();
+    /*
+    cudaDataType_t BType, AType, CType;
+    cudaDataType_t computeType;
+    int cublasAlgo;
+    if (sizeof(TT_DATA_TYPE) == sizeof(half))  // fp16 
+    {
+        BType = CUDA_R_16F;
+        AType = CUDA_R_16F;
+        CType = CUDA_R_16F;
+        computeType = CUDA_R_16F;
+        cublasAlgo = CUBLAS_GEMM_DEFAULT_TENSOR_OP;
+        // cublasAlgo = CUBLAS_GEMM_DEFAULT;
+    }
+    else  // fp32, and others data type
+    {
+        BType = CUDA_R_32F;
+        AType = CUDA_R_32F;
+        CType = CUDA_R_32F;
+        computeType = CUDA_R_32F;
+        cublasAlgo = CUBLAS_GEMM_DEFAULT;
+    } */
+
+    // auto cublas_handle = q_tmp->getDevice()->getCublasHandle();
 
     const int size_per_head = q_tmp->shape()[-1] / head_num;
     const int seq_len = q_tmp->shape()[-2];
     const int batch_size = q_tmp->shape()[-3];
 
-    float scalar = 1 / sqrtf(size_per_head * 1.0f);
+    // float scalar = 1 / sqrtf(size_per_head * 1.0f);
+    // TT_DATA_TYPE scalar = (TT_DATA_TYPE) 1/sqrtf(size_per_head * 1.0f);
 
     // module test
     const int k = head_num * size_per_head;
@@ -3969,24 +4630,48 @@ void EncoderUnFusedSelfAttentionOP(
     // LOG(trace, "[TenTrans][HUMultiHeadAttention] vhs {}", v_buf->debug());
 
     /* 2. caculate attention weights -> qk_buf */
-    float alpha = 1.0f, beta = 0.0f;
+    auto cublas_handle = q_tmp->getDevice()->getCublasHandle();
+    TT_DATA_TYPE alpha = (TT_DATA_TYPE)1.0f, beta = (TT_DATA_TYPE)0.0f;
+
+    cudaDataType_t BType, AType, CType;
+    cudaDataType_t computeType;
+    int cublasAlgo;
+    if (sizeof(TT_DATA_TYPE) == sizeof(half))  // fp16 
+    {
+        BType = CUDA_R_16F;
+        AType = CUDA_R_16F;
+        CType = CUDA_R_16F;
+        computeType = CUDA_R_16F;
+        cublasAlgo = CUBLAS_GEMM_DEFAULT_TENSOR_OP;
+        // cublasAlgo = CUBLAS_GEMM_DEFAULT;
+    }
+    else  // fp32, and others data type
+    {
+        BType = CUDA_R_32F;
+        AType = CUDA_R_32F;
+        CType = CUDA_R_32F;
+        computeType = CUDA_R_32F;
+        cublasAlgo = CUBLAS_GEMM_DEFAULT;
+    } 
+
     cublasGemmStridedBatchedEx(cublas_handle,
         CUBLAS_OP_T, CUBLAS_OP_N,
         seq_len, seq_len, size_per_head,
         &alpha,
-        k_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
-        q_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
+        k_buf->data(), BType, size_per_head, seq_len * size_per_head,
+        q_buf->data(), AType, size_per_head, seq_len * size_per_head,
         &beta,
-        qk_buf->data(), CUDA_R_32F, seq_len, seq_len * seq_len,
+        qk_buf->data(), CType, seq_len, seq_len * seq_len,
         batch_size * head_num,
-        CUDA_R_32F,
-        static_cast<cublasGemmAlgo_t>(CUBLAS_GEMM_DEFAULT));
+        computeType,
+        static_cast<cublasGemmAlgo_t>(cublasAlgo));
     
     // ProdBatchedOP(qk_buf, q_buf, k_buf, mem, false, true, 0.f, scalar);
 
     //// LOG(trace, "[TenTrans][HUMultiHeadAttention] qk_buf {}", qk_buf->debug());
 
     /* 3. softmax fuction */
+    TT_DATA_TYPE scalar = (TT_DATA_TYPE) (1 / sqrtf(size_per_head * 1.0f));
     attn_softmax_kernelLauncher(qk_buf->data(), att_mask->data(), batch_size, seq_len, head_num, scalar);
 
     //// LOG(trace, "[TenTrans][HUMultiHeadAttention] softmax {}", qk_buf->debug());
@@ -3996,13 +4681,13 @@ void EncoderUnFusedSelfAttentionOP(
         CUBLAS_OP_N, CUBLAS_OP_N,
         size_per_head, seq_len, seq_len,
         &alpha,
-        v_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
-        qk_buf->data(), CUDA_R_32F, seq_len, seq_len * seq_len,
+        v_buf->data(), BType, size_per_head, seq_len * size_per_head,
+        qk_buf->data(), AType, seq_len, seq_len * seq_len,
         &beta,
-        att_out_transpose_buf->data(), CUDA_R_32F, size_per_head, seq_len * size_per_head,
+        att_out_transpose_buf->data(), CType, size_per_head, seq_len * size_per_head,
         batch_size * head_num,
-        CUDA_R_32F,
-        static_cast<cublasGemmAlgo_t>(CUBLAS_GEMM_DEFAULT));
+        computeType,
+        static_cast<cublasGemmAlgo_t>(cublasAlgo));
 
     //// LOG(trace, "[TenTrans][HUMultiHeadAttention] att_out_transpose_buf {}", att_out_transpose_buf->debug());
 
@@ -4276,6 +4961,7 @@ void broadcast_kernel(T* out,
 }
 
 
+/*
 void broadcast_kernelLauncher(float* out, 
                               float* log_probs, 
                               float* cum_log_probs, 
@@ -4287,13 +4973,27 @@ void broadcast_kernelLauncher(float* out,
     dim3 grid((N - 1) / block.x + 1);
 
     broadcast_kernel<float><<<grid, block, 0>>>(out, log_probs, cum_log_probs, vocab_size, N);
-}
+} */
+
+template<typename T>
+void broadcast_kernelLauncher(T* out, 
+                              T* log_probs, 
+                              T* cum_log_probs, 
+                              const int batch_beam_size, 
+                              const int vocab_size)
+{
+    int N = batch_beam_size * vocab_size;
+    dim3 block(1024);
+    dim3 grid((N - 1) / block.x + 1);
+
+    broadcast_kernel<T><<<grid, block, 0>>>(out, log_probs, cum_log_probs, vocab_size, N);
+} 
 
 void BroadCastPlusOP(HUPtr<HUTensor> &out, HUPtr<HUTensor> log_probs, HUPtr<HUTensor> cum_log_probs)
 {
     const int batch_beam_size = log_probs->shape()[-2];
     const int vocab_size = log_probs->shape()[-1];
-    broadcast_kernelLauncher(out->data(), log_probs->data(), cum_log_probs->data(), batch_beam_size, vocab_size);
+    broadcast_kernelLauncher<TT_DATA_TYPE>(out->data(), log_probs->data(), cum_log_probs->data(), batch_beam_size, vocab_size);
 }
 
 
@@ -4315,7 +5015,7 @@ void broadcast_2_kernel(T* out,
     }
 }
 
-
+/*
 void broadcast_2_kernelLauncher(float* out,
                                 float* log_probs,
                                 float* cum_log_probs,
@@ -4328,13 +5028,29 @@ void broadcast_2_kernelLauncher(float* out,
     dim3 grid((N - 1) / block.x + 1);
 
     broadcast_2_kernel<float><<<grid, block, 0>>>(out, log_probs, cum_log_probs, bias, vocab_size, N);
-}
+} 
+*/
+template<typename T>
+void broadcast_2_kernelLauncher(T* out,
+                                T* log_probs,
+                                T* cum_log_probs,
+                                const T* bias, 
+                                const int batch_beam_size,
+                                const int vocab_size)
+{
+    int N = batch_beam_size * vocab_size;
+    dim3 block(1024);
+    dim3 grid((N - 1) / block.x + 1);
+
+    broadcast_2_kernel<T><<<grid, block, 0>>>(out, log_probs, cum_log_probs, bias, vocab_size, N);
+} 
 
 void BroadCastPlusWithBiasOP(HUPtr<HUTensor> &out, HUPtr<HUTensor> log_probs, HUPtr<HUTensor> cum_log_probs, const HUPtr<HUTensor> bias)
 {
     const int batch_beam_size = log_probs->shape()[-2];
     const int vocab_size = log_probs->shape()[-1];
-    broadcast_2_kernelLauncher(out->data(), log_probs->data(), cum_log_probs->data(), bias->data(), batch_beam_size, vocab_size);
+    broadcast_2_kernelLauncher<TT_DATA_TYPE>(out->data(), log_probs->data(), cum_log_probs->data(), \ 
+            bias->data(), batch_beam_size, vocab_size);
 }
 
 
@@ -4502,12 +5218,12 @@ void TopKOP(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<fl
     int *ids, *topk_tmp_id_buf;
     CUDA_CHECK(cudaMalloc(&ids, topKIds.size() * sizeof(int)));
     CUDA_CHECK(cudaMalloc(&topk_tmp_id_buf, topKIds.size() * sizeof(int)));
-    float *topk_tmp_val_buf;
-    CUDA_CHECK(cudaMalloc(&topk_tmp_val_buf, topKValues.size() * sizeof(float)));
+    TT_DATA_TYPE *topk_tmp_val_buf;
+    CUDA_CHECK(cudaMalloc(&topk_tmp_val_buf, topKValues.size() * sizeof(TT_DATA_TYPE)));
 
-    topK_kernelLauncher<float>(log_probs->data(), topk_tmp_id_buf,
-                               topk_tmp_val_buf, ids,
-                               batch_size, K, vocab_size);
+    topK_kernelLauncher<TT_DATA_TYPE>(log_probs->data(), topk_tmp_id_buf, 
+                                      topk_tmp_val_buf, ids, 
+                                      batch_size, K, vocab_size);
 
     // Device_data to Host_data
     CUDA_CHECK(cudaMemcpy(topKIds.data(), ids, topKIds.size() * sizeof(int), cudaMemcpyDeviceToHost));
@@ -4518,11 +5234,22 @@ void TopKOP(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<fl
     CUDA_CHECK(cudaFree(topk_tmp_val_buf));
 }
 
-void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size)
+void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size, void* tmp_storage)
 {
+    /*
     const int batch_size = log_probs->size() / vocab_size;
     const int temp_size = batch_size * K * MAX_BLOCKS_PER_BEAM;
+    */
 
+    const int batch_size = log_probs->shape()[-2];
+    const int depth = log_probs->shape()[-1];
+    const int temp_size = batch_size * K * MAX_BLOCKS_PER_BEAM;
+
+    int* topk_tmp_id_buf = (int*)tmp_storage;
+    TT_DATA_TYPE* topk_tmp_val_buf = (TT_DATA_TYPE*)(topk_tmp_id_buf + temp_size);
+    int* topk_id_buf = (int*)(topk_tmp_val_buf + temp_size);
+    TT_DATA_TYPE* topk_val_buf = (TT_DATA_TYPE*)(topk_id_buf + topKIds.size());
+    /*
     cudaSetDevice(log_probs->getDeviceId().no);
     int* topk_tmp_id_buf;
     CUDA_CHECK(cudaMalloc(&topk_tmp_id_buf, temp_size * sizeof(int)));
@@ -4533,25 +5260,778 @@ void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector
     CUDA_CHECK(cudaMalloc(&topk_id_buf, topKIds.size() * sizeof(int)));
     float* topk_val_buf;
     CUDA_CHECK(cudaMalloc(&topk_val_buf, topKValues.size() * sizeof(float)));
+    */
 
 
-    fastertransformer::topK_kernelLauncher(log_probs->data(), 
-                                           topk_tmp_id_buf, topk_tmp_val_buf, 
-                                           topk_id_buf, topk_val_buf, 
-                                           batch_size, 1, K, vocab_size);
+    fastertransformer::topK_kernelLauncher<TT_DATA_TYPE>(log_probs->data(), 
+                                                         topk_tmp_id_buf, topk_tmp_val_buf,
+                                                         topk_id_buf, topk_val_buf,
+                                                         batch_size, 1, K, /*vocab_size*/ depth);
 
     CUDA_CHECK(cudaMemcpy(topKIds.data(), topk_id_buf, topKIds.size() * sizeof(int), cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(topKValues.data(), topk_val_buf, topKValues.size() * sizeof(float), cudaMemcpyDeviceToHost));
+    /*
     CUDA_CHECK(cudaFree(topk_id_buf));
     CUDA_CHECK(cudaFree(topk_val_buf));
 
     CUDA_CHECK(cudaFree(topk_tmp_id_buf));
     CUDA_CHECK(cudaFree(topk_tmp_val_buf));
+    */
 }
 
 
-} // namespace TenTrans
 
+struct __align__(8) MD
+{
+    float m;
+    float d;
+};
+
+__device__ __forceinline__ MD reduce_md_op(MD a, MD b)
+{
+    bool a_bigger = (a.m > b.m); 
+    MD bigger_m = a_bigger ? a : b;
+    MD smaller_m = a_bigger ? b : a;
+    MD res; 
+    res.d = bigger_m.d + smaller_m.d * __expf(smaller_m.m - bigger_m.m);
+    res.m = bigger_m.m;
+    return res;
+}
+
+template<typename T, int MAX_K>
+struct TopKMD
+{
+    MD md;
+    TopK<T, MAX_K> topk;
+};
+
+template<typename T, int MAX_K>
+__device__ __forceinline__ TopKMD<T, MAX_K> reduce_topk_md_op(const TopKMD<T, MAX_K>& a, const TopKMD<T, MAX_K>& b)
+{
+    TopKMD<T, MAX_K> res;
+    res.md = reduce_md_op(a.md, b.md);
+    res.topk = reduce_topk_op(a.topk, b.topk);
+    return res;
+}
+
+#define TOPK_FP16_STORAGE 0
+template<typename T, int ITEMS_PER_THREAD, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE, 1)
+__global__ void beam_online_softmax_topk_stage1_kernel(
+    const T * __restrict x,                  // log_probs:  [batch_size*beam_width, vocab_size]
+    const T * __restrict b,                  // bias:       [vocab_size]
+    const uint8_t  * __restrict finished,    // finished:   [batch_size]
+    float * __restrict t,                    // tmp_buf:    []
+    int beam_width,                          // - beam_width
+    int V,                                   // - vocab_size
+    int E)                                   // - end ID
+{
+    int thread_id = threadIdx.x;
+    int vector_id = blockIdx.x;
+
+    const int PACKED_TOP_KMD_SIZE = 2 * MAX_K + 2;
+
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+
+    // one will have multiple sections per V
+    const int v_local = (V + gridDim.y - 1) / gridDim.y;
+    const int section_start = v_local * blockIdx.y;
+    int section_end = section_start + v_local;
+    section_end = (section_end > V)? V : section_end;
+
+    // reposition x to data for the current vector
+    x += vector_id * V;
+#if TOPK_FP16_STORAGE == 1
+    typedef cub::BlockReduce<TopKMD<__half, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+#else
+    typedef cub::BlockReduce<TopKMD<T, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+#endif
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ float buf_s[PACKED_TOP_KMD_SIZE]; // save intermediate result
+
+#if TOPK_FP16_STORAGE == 1
+    TopKMD<__half, MAX_K> partial;
+#else
+    TopKMD<T, MAX_K> partial;
+#endif
+    //// bool finish = finished[vector_id];
+    bool finish = finished[vector_id / beam_width];
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.topk.p[i] = -1;
+        partial.topk.u[i] = -MAX_T_VAL;
+    }
+    partial.md.m = -MAX_T_VAL;
+    partial.md.d = 0.0F;
+ 
+    if (finish)
+    {
+        #pragma unroll 1
+        for(int elem_id = section_start + thread_id; elem_id < section_end; elem_id += THREADBLOCK_SIZE)
+        {
+            float elem = (elem_id == E) ? MAX_T_VAL : -MAX_T_VAL;
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+    else
+    {
+        #pragma unroll 1
+        for(int elem_id = section_start + thread_id; elem_id < section_end; elem_id += THREADBLOCK_SIZE)
+        {
+            T bias = b == nullptr ? (T)0.0f : b[elem_id]; // gpt-2 does not use bias
+            T elem = x[elem_id] + bias;
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+
+#if TOPK_FP16_STORAGE == 1
+    TopKMD<__half, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_md_op<__half, MAX_K>);
+#else
+    TopKMD<T, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_md_op<T, MAX_K>);
+#endif
+
+    if (thread_id == 0)
+    {
+        for (int i = 0; i < MAX_K; i++)
+        {
+            reinterpret_cast<int *>(buf_s)[i] = total.topk.p[i] + vector_id * V; // faster transformer needs absolute id
+            buf_s[MAX_K + i] = total.topk.u[i];
+        }
+        buf_s[2 * MAX_K] = total.md.d;
+        buf_s[2 * MAX_K + 1] = total.md.m;
+    }
+    __syncthreads();
+    if (threadIdx.x < PACKED_TOP_KMD_SIZE)
+    {
+        t[blockIdx.x * PACKED_TOP_KMD_SIZE * gridDim.y + blockIdx.y * PACKED_TOP_KMD_SIZE + threadIdx.x] = buf_s[threadIdx.x];
+    }
+}
+
+template<typename T, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE)
+__global__ void beam_online_softmax_topk_stage2_kernel(
+    const float * __restrict x,
+    const float * __restrict c,
+    int * __restrict z,
+    T * __restrict v, 
+    int parts_per_beam)
+{
+    const int vector_id = blockIdx.x;
+    const int thread_id = threadIdx.x;
+    const int PACKED_TOP_KMD_SIZE = 2 * MAX_K + 2;
+
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+
+    extern __shared__ char buf_s_[]; // intermediate result
+    float * buf_s = reinterpret_cast<float *>(buf_s_);
+    //__shared__ float buf_s[PACKED_TOP_KMD_SIZE * THREADBLOCK_SIZE]; // intermediate result
+
+    typedef cub::BlockReduce<TopKMD<T, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    x += vector_id * PACKED_TOP_KMD_SIZE * parts_per_beam;
+
+    TopKMD<T, MAX_K> partial; 
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.topk.p[i] = -1;
+        partial.topk.u[i] = -MAX_T_VAL;
+    }
+    partial.md.m = -MAX_T_VAL;
+    partial.md.d = 0.0F;
+
+    // load and unpack into registers through smem
+    for (int idx = thread_id; idx < PACKED_TOP_KMD_SIZE * parts_per_beam; idx += THREADBLOCK_SIZE)
+    {
+        buf_s[idx] = x[idx];
+    }
+    __syncthreads();
+
+    if (threadIdx.x < parts_per_beam)
+    {
+        float * b_s = buf_s + thread_id * PACKED_TOP_KMD_SIZE;
+        for (int i = 0; i < MAX_K; i++)
+        {
+            partial.topk.p[i] = reinterpret_cast<int *>(b_s)[i];
+            partial.topk.u[i] = b_s[MAX_K + i];
+        }
+        partial.md.d = b_s[2 * MAX_K]; 
+        partial.md.m = b_s[2 * MAX_K + 1];
+    }
+    __syncthreads();
+
+    TopKMD<T, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_md_op<T, MAX_K>);
+
+    if (thread_id == 0)
+    {
+        z += vector_id * MAX_K;
+        v += vector_id * MAX_K;
+        c += vector_id;
+
+        float d_total_log = logf(total.md.d);
+        for(int i = 0; i < MAX_K; ++i)
+        {
+            float val = (float)total.topk.u[i] - total.md.m - d_total_log;
+            if (i < MAX_K)
+            {
+                z[i] = total.topk.p[i];
+                v[i] = (float)val + (float)c[0];
+            }
+        }
+    }
+}
+
+template<typename T, int MAX_K>
+void beam_online_softmax_topk_stage2_kernelLauncher(
+    const float * temp_storage,
+    const float * cum_log_probs,
+    int * ids,
+    T * vals, 
+    int batch_size,
+    int beam_width,
+    int parts_per_beam)
+{
+    // might rewrite beam_online_softmax_topk_stage2_kernel no to depend on constant block size
+    // in oreder to reduce compilation time
+    int smem_stage2_size = parts_per_beam * (2 * MAX_K + 2) * sizeof(float);
+
+    /*
+    if (parts_per_beam <= 4)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 4>
+        <<<batch_size * beam_width, 4, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    }
+    if (parts_per_beam <= 8)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 8>
+        <<<batch_size * beam_width, 8, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    }
+    if (parts_per_beam <= 16)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 16>
+        <<<batch_size * beam_width, 16, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    } */ 
+    if (parts_per_beam <= 32)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 32>
+        <<<batch_size * beam_width, 32, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    }
+    if (parts_per_beam <= 64)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 64>
+        <<<batch_size * beam_width, 64, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    }
+    if (parts_per_beam <= 128)
+    {
+        beam_online_softmax_topk_stage2_kernel<T, MAX_K, 128>
+        <<<batch_size * beam_width, 128, smem_stage2_size>>>
+                (temp_storage, cum_log_probs, ids, vals, parts_per_beam);
+        return;
+    }
+    assert(0);
+}
+
+template<typename T, int ITEMS_PER_THREAD, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE)
+__global__ void beam_online_softmax_topk_kernel(
+    const T * __restrict x,                     // log_probs:     [batch_size * beam_width, vocab_size]
+    const T * __restrict b,                     // bias:          [vocab_size]
+    const float * __restrict c,                 // cum_log_probs: [batch_size * beam_width * MAX_K] 
+    const uint8_t  * __restrict finished,       // finished:      [batch_size]
+    int * __restrict z,                         // tmp_ids:       [batch_size * beam_width * MAX_K]
+    T * __restrict v,                           // tmp_vals:      [batch_size * beam_width * MAX_K]
+    int beam_width,                             // - beam_width
+    int V,                                      // - vocab_size
+    int E)                                      // - end ID
+{
+    int thread_id = threadIdx.x;
+    int vector_id = blockIdx.x;
+
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+
+    // reposition y to data for the current vector
+    x += vector_id * V;
+
+    typedef cub::BlockReduce<TopKMD<float, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    TopKMD<float, MAX_K> partial;
+    bool finish = finished[vector_id / beam_width];
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.topk.p[i] = -1;
+        partial.topk.u[i] = -MAX_T_VAL;
+    }
+    partial.md.m = -MAX_T_VAL;
+    partial.md.d = 0.0F;
+
+    if (finish)
+    {
+        for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+        {
+            float elem = (elem_id == E) ? MAX_T_VAL : -MAX_T_VAL;
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+    else
+    {
+        for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+        {
+            float elem = x[elem_id] + b[elem_id];
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+
+    TopKMD<float, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_md_op<float, MAX_K>);
+
+    if (thread_id == 0)
+    {
+        z += vector_id * MAX_K;
+        v += vector_id * MAX_K;
+        c += vector_id;
+
+        float d_total_log = logf(total.md.d);
+        for(int i = 0; i < MAX_K; ++i)
+        {
+            float val = total.topk.u[i] - total.md.m - d_total_log;
+            if (i < MAX_K)
+            {
+                z[i] = total.topk.p[i] + vector_id * V; // faster transformer needs absolute id
+                v[i] = val + c[0];
+            }
+        }
+    }
+}
+
+template<typename T, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE)
+__global__ void batch_topk_kernel(
+    const int * __restrict x,     // tmp_ids:      [batch_size*beam_size, MAX_K] 
+    const T * __restrict y,       // tmp_values:   [batch_size*beam_size, MAX_K]
+    int * __restrict z,           // ids:          [batch_size, MAX_K]
+    float * __restrict v,         // values:       [batch_size, MAX_K]
+    int V,                        // - vocab_size
+    T diversity_rate)
+{
+    int thread_id = threadIdx.x;
+    int vector_id = blockIdx.x;
+
+    // reposition x, y to data for the current vector
+    x += vector_id * V;
+    y += vector_id * V;
+
+    typedef cub::BlockReduce<TopK<T, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    TopK<T, MAX_K> partial;
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.p[i] = -1;
+        partial.u[i] = -FLT_MAX;
+    }
+    for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+    {
+        int i = elem_id % MAX_K;
+        T elem = y[elem_id] + diversity_rate * (T) i;
+        int elem_idx = elem_id; //x[elem_id];
+        partial.insert(elem, elem_idx);
+    }
+
+    TopK<T, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_op<T, MAX_K>);
+
+    if (thread_id == 0)
+    {
+        z += vector_id * MAX_K;
+        v += vector_id * MAX_K;
+
+        for(int i = 0; i < MAX_K; ++i)
+        {
+            if (i < MAX_K)
+            {
+                z[i] = x[total.p[i]];
+                v[i] = (float)y[total.p[i]];
+            }
+        }
+    }
+}
+
+template <typename T, int MAX_K>
+void topK_softMax_kernelLauncher(const T* log_probs,          // [batch_size * beam_size, vocab_size]
+                                 const T* bias,               // [vocab_size]
+                                 const uint8_t* finished,     // [batch_size]
+                                 float* cum_log_probs,        // [batch_size, MAX_K]
+                                 int* ids,                    // [batch_size, MAX_K]
+                                 void* temp_storage,
+                                 const int temp_storage_size, 
+                                 const int batch_size,
+                                 const int beam_width,
+                                 const int vocab_size,
+                                 const int end_id,
+                                 T diversity_rate)
+{
+    // std::cout << "beam_width:" << beam_width << "\tbatch_size:" << batch_size << "\tMAX_K:" << MAX_K << std::endl;
+    const int items_per_thread = 1;
+    const int block_sz = (MAX_K < 16)? (MAX_K < 8)? SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE:128:64;
+    //// const int block_sz = SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE;
+
+    assert(temp_storage_size % 2 == 0);
+    assert(temp_storage_size >= 2 * batch_size * beam_width * MAX_K);
+    //// assert(temp_storage_size >= 2 * batch_size * MAX_K/2 * MAX_K);
+
+    const int topk_buf_offset = (int)(ceil(batch_size * beam_width * MAX_K / 4.) * 4);
+    //// const int topk_buf_offset = (int)(ceil(batch_size * MAX_K/2 * MAX_K / 4.) * 4);
+    int* topk_tmp_id_buf = reinterpret_cast<int *>(temp_storage);
+    T* topk_tmp_val_buf = reinterpret_cast<T *>(topk_tmp_id_buf + topk_buf_offset);
+    // T* topk_tmp_val_buf = reinterpret_cast<T *>(topk_tmp_id_buf + topk_buf_offset);
+
+    if (batch_size * beam_width < 256)
+    {
+        // std::cout << "Small TopKSoftmax" << std::endl;
+        float* tmp_buffer = reinterpret_cast<float *>(topk_tmp_val_buf + topk_buf_offset);
+
+        // Volta has 80 SMs, so we aim for three waves
+        int voc_parts = (240 + batch_size * beam_width - 1) / (batch_size * beam_width);
+        voc_parts = std::min(128, voc_parts); // we implment up to 128
+        //// voc_parts = 4;
+
+        dim3 grid(batch_size * beam_width, voc_parts);
+        cudaFuncSetAttribute(
+                beam_online_softmax_topk_stage1_kernel<T, items_per_thread, MAX_K, block_sz>, 
+                cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxL1);
+        
+        beam_online_softmax_topk_stage1_kernel<T, items_per_thread, MAX_K, block_sz> 
+                <<<grid, block_sz, 0>>>
+                (log_probs, bias, finished, tmp_buffer, beam_width, vocab_size, end_id);        
+
+        if (beam_width > 1)
+        {
+            beam_online_softmax_topk_stage2_kernelLauncher<T, MAX_K> 
+                (tmp_buffer, cum_log_probs, topk_tmp_id_buf, topk_tmp_val_buf, 
+                 batch_size, beam_width, voc_parts);
+
+            batch_topk_kernel<T, MAX_K, 32><<<batch_size, 32, 0>>>
+                (topk_tmp_id_buf, topk_tmp_val_buf, ids, cum_log_probs, 
+                 beam_width * MAX_K, diversity_rate);
+        }
+        else
+        {
+            beam_online_softmax_topk_stage2_kernelLauncher<float, MAX_K> 
+                (tmp_buffer, cum_log_probs, ids, cum_log_probs, 
+                 batch_size, beam_width, voc_parts);
+        }
+    }
+    else
+    {
+        // std::cout << "normal TopKSoftmax" << std::endl;
+        if (beam_width > 1)
+        {
+            beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz> 
+                <<<batch_size * beam_width, block_sz, 0>>> 
+                (log_probs, bias, cum_log_probs, finished, topk_tmp_id_buf, topk_tmp_val_buf, 
+                 beam_width, vocab_size, end_id);
+
+            batch_topk_kernel<T, MAX_K, 32><<<batch_size, 32, 0>>> 
+                (topk_tmp_id_buf, topk_tmp_val_buf, ids, cum_log_probs, 
+                 beam_width * MAX_K, diversity_rate);
+        }
+        else
+        {
+            /*
+            beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz> 
+                <<<batch_size * beam_width, block_sz, 0>>>
+                (log_probs, bias, cum_log_probs, finished, ids, cum_log_probs, 
+                 beam_width, vocab_size, end_id);
+             */
+        }
+    }
+    
+
+    /*
+    std::cout << "SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE:" << SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE
+        << "\tSMALL_TOP_K_SOFTMAX_MAX_VOC_PARTS:" << SMALL_TOP_K_SOFTMAX_MAX_VOC_PARTS
+        << "\tMAX_K:" << MAX_K << std::endl;
+
+    std::cout << "items_per_thread:" << items_per_thread << "\tblock_sz:" << block_sz << "\tbatch_size:"
+        << batch_size << "\tbeam_width:" << beam_width << "\tvocab_size:" << vocab_size << "\tend_id:" << end_id << std::endl;
+    */
+
+    //// std::cout << "test1" << std::endl;
+
+/*
+#ifdef DO_SPLIT_SMALL_TOP_K_SOFTMAX
+    int voc_parts = 4;
+    if (batch_size * beam_width < 256)
+    {  
+        // Volta has 80 SMs, so we aim for three waves
+        voc_parts = (240 + batch_size * beam_width - 1) / (batch_size * beam_width);
+        voc_parts = std::min(128, voc_parts); // we implment up to 128
+    }
+    //// std::cout << "test2" << std::endl;
+    dim3 grid(batch_size * beam_width, voc_parts);
+    cudaFuncSetAttribute(
+            beam_online_softmax_topk_stage1_kernel<T, items_per_thread, MAX_K, block_sz>, 
+            cudaFuncAttributePreferredSharedMemoryCarveout, 
+            cudaSharedmemCarveoutMaxL1);
+    beam_online_softmax_topk_stage1_kernel<T, items_per_thread, MAX_K, block_sz>
+                            <<<grid, block_sz, 0>>>
+                            (log_probs, bias, finished, tmp_buffer,
+                             beam_width, vocab_size, end_id);
+    //// std::cout << "test3" << std::endl;
+#endif
+
+    if (beam_width > 1)
+    {
+#ifdef DO_SPLIT_SMALL_TOP_K_SOFTMAX
+        //// std::cout << "test4" << std::endl;
+        beam_online_softmax_topk_stage2_kernelLauncher<T, MAX_K>
+            (tmp_buffer, cum_log_probs, topk_tmp_id_buf, topk_tmp_val_buf, 
+             batch_size, beam_width, voc_parts);
+        //// std::cout << "test5" << std::endl;
+#else 
+        beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz>
+            <<<batch_size * beam_width, block_sz, 0>>>
+                (log_probs, bias, cum_log_probs, finished, topk_tmp_id_buf, 
+                 topk_tmp_val_buf, beam_width, vocab_size, end_id);
+#endif
+        //// std::cout << "test6" << std::endl;
+        batch_topk_kernel<T, MAX_K, 32><<<batch_size, 32, 0>>> 
+                (topk_tmp_id_buf, topk_tmp_val_buf, ids, 
+                 cum_log_probs, beam_width * MAX_K, diversity_rate);
+        //// std::cout << "test7" << std::endl;
+    }
+    else
+    {
+#ifdef DO_SPLIT_SMALL_TOP_K_SOFTMAX
+        //// std::cout << "test8" << std::endl;
+        beam_online_softmax_topk_stage2_kernelLauncher<float, MAX_K>
+            (tmp_buffer, cum_log_probs, ids, cum_log_probs, 
+             batch_size, beam_width, voc_parts);
+        //// std::cout << "test9" << std::endl;
+
+#else
+        //// std::cout << "test10" << std::endl;
+        beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz>
+            <<<batch_size * beam_width, block_sz, 0>>>
+            (log_probs, bias, cum_log_probs, finished, ids, 
+             cum_log_probs, beam_width, vocab_size, end_id);
+        //// std::cout << "test11" << std::endl;
+#endif
+    } */
+}
+
+template <typename T>
+void topK_softMax(const T* log_probs,
+                  const T* bias,
+                  const uint8_t* finished,
+                  float* cum_log_probs,
+                  int* ids,
+                  const int K,
+                  void* temp_storage,
+                  const int temp_storage_size,
+                  const int batch_size,
+                  const int beam_width,
+                  const int vocab_size,
+                  const int end_id,
+                  const T diversity_rate)
+{
+    switch(beam_width)
+    {
+        case 1 :
+            switch(K)
+            {
+                case 1:
+                    topK_softMax_kernelLauncher<T, 1>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 2:
+                    topK_softMax_kernelLauncher<T, 2>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 4:
+                    topK_softMax_kernelLauncher<T, 4>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 8:
+                    topK_softMax_kernelLauncher<T, 8>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 10:
+                    topK_softMax_kernelLauncher<T, 10>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 16:
+                    topK_softMax_kernelLauncher<T, 16>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 32:
+                    topK_softMax_kernelLauncher<T, 32>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                default :
+                    topK_softMax_kernelLauncher<T, 32>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+            }
+            break;
+    
+        case 2 :
+            topK_softMax_kernelLauncher<T, 4>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 3 :
+            topK_softMax_kernelLauncher<T, 6>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 4 :
+            topK_softMax_kernelLauncher<T, 8>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 5 :
+            topK_softMax_kernelLauncher<T, 10>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 8 :
+            topK_softMax_kernelLauncher<T, 16>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 16 :
+            topK_softMax_kernelLauncher<T, 32>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 32 :
+            topK_softMax_kernelLauncher<T, 64>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        default :
+            printf("[ERROR] Topk kernel does not support beamwidth = %d \n", beam_width);
+            exit(0);
+            break;
+    }
+}
+
+template void topK_softMax<float>(const float* log_probs,
+                                  const float* bias,
+                                  const uint8_t* finished,
+                                  float* cum_log_probs,
+                                  int* ids,
+                                  const int K,
+                                  void* tmp_storage,
+                                  const int temp_storage_size,
+                                  const int batch_size,
+                                  const int beam_width,
+                                  const int vocab_size,
+                                  const int end_id,
+                                  const float diversity_rate);
+
+/*
+ * >> log_probs:     [batch_size*beam_size, vocab_size]
+ * >> cum_log_probs: [batch_size*beam_size]
+ * >> topKIds:       [batch_size*K]
+ *
+ */
+void TopKSoftmaxOP(HUPtr<HUTensor> log_probs,
+                   const HUPtr<HUTensor> bias,
+                   std::vector<float> &cum_log_probs,
+                   std::vector<int> &topKIds,
+                   const int K,
+                   void* temp_storage,
+                   const int temp_storage_size,
+                   uint8_t* isAllDone)
+{
+    const int batch_size = topKIds.size() / K;
+    const int beam_width = log_probs->shape()[-2] / batch_size; // if step=0, beam_width=1
+    const int vocab_size = bias->shape()[-1];
+
+    cudaSetDevice(bias->getDeviceId().no);
+    float* device_cum_log_probs;
+    CUDA_CHECK(cudaMalloc(&device_cum_log_probs, cum_log_probs.size() * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(device_cum_log_probs, cum_log_probs.data(),
+                cum_log_probs.size() * sizeof(float), cudaMemcpyHostToDevice));
+
+    int* device_topKIds;
+    CUDA_CHECK(cudaMalloc(&device_topKIds, topKIds.size() * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(device_topKIds, topKIds.data(), 
+                topKIds.size() * sizeof(int), cudaMemcpyHostToDevice));
+
+    const TT_DATA_TYPE diversity_rate = (TT_DATA_TYPE)0.0f;
+    const int end_id = (int)EOS_ID;
+
+    topK_softMax<TT_DATA_TYPE>(log_probs->data(), 
+                 bias->data(), 
+                 isAllDone, 
+                 device_cum_log_probs, 
+                 device_topKIds, 
+                 K, 
+                 temp_storage, 
+                 temp_storage_size, 
+                 batch_size, 
+                 beam_width, 
+                 vocab_size, 
+                 end_id, 
+                 diversity_rate);
+
+    //// std::cout << "test 11" << std::endl;
+    /// std::cout << "Size: " << topKIds.size() << std::endl;
+    CUDA_CHECK(cudaMemcpy(topKIds.data(), device_topKIds, topKIds.size() * sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(cum_log_probs.data(), device_cum_log_probs, topKIds.size() * sizeof(float), cudaMemcpyDeviceToHost));
+
+    /*
+    for(int i = 0; i < topKIds.size(); i++) {
+        std::cout << topKIds[i] << "\t" << cum_log_probs[i] << std::endl;
+    } */
+
+    //// std::cout << "test 12" << std::endl;
+    CUDA_CHECK(cudaFree(device_cum_log_probs));
+    CUDA_CHECK(cudaFree(device_topKIds)); 
+    //// std::cout << "test 13" << std::endl;
+
+}
+
+} // namespace TenTrans
 
 
 #include "cub.cuh"
@@ -4751,5 +6231,396 @@ namespace fastertransformer
       break;
     }
   }
+}   // namespace fastertransformer   
 
-} // namespace fastertransformer 
+//////////////////////////////// TopK Softmax ///////////////////////////// 
+/*
+#include "cub.cuh"
+namespace fastertransformer_V2 {
+
+static const float HALF_FLT_MAX = 65504.F;
+template<typename T, int MAX_K>
+struct TopK
+{
+    int p[MAX_K];
+    T u[MAX_K];
+
+    __device__ __forceinline__ void insert(T elem, int elem_id)
+    {
+        if (elem > u[MAX_K-1] || (p[MAX_K-1] == -1) || ((elem == u[MAX_K-1]) && (elem_id < p[MAX_K-1])))
+        //if (elem > u[MAX_K-1] || ((elem == u[MAX_K-1]) && (elem_id < p[MAX_K-1])))
+        {
+            u[MAX_K-1] = elem;
+            p[MAX_K-1] = elem_id;
+        }
+
+        for(int k = MAX_K - 2; k >= 0; --k)
+        {
+            if ((u[k+1] > u[k]) || (p[k] == -1) || ((u[k+1] == u[k])&&(p[k+1] < p[k])))
+            //if ((u[k+1] > u[k]) || ((u[k+1] == u[k])&&(p[k+1] < p[k])))
+            {
+                T u2 = u[k];
+                int p2 = p[k];
+                u[k] = u[k+1];
+                p[k] = p[k+1];
+                u[k+1] = u2;
+                p[k+1] = p2;
+            }
+        }
+    }
+
+    __device__ __forceinline__ void init()
+    {
+        const bool IS_FP16 = std::is_same<T, half>::value;
+        const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+
+        for(int i = 0; i < MAX_K; i++)
+        {
+            p[i] = -1;
+            u[i] = -MAX_T_VAL;
+        }
+    }
+};
+
+struct __align__(8) MD
+{
+    float m;
+    float d;
+};
+
+__device__ __forceinline__ MD reduce_md_op(MD a, MD b)
+{
+    bool a_bigger = (a.m > b.m); 
+    MD bigger_m = a_bigger ? a : b;
+    MD smaller_m = a_bigger ? b : a;
+    MD res; 
+    res.d = bigger_m.d + smaller_m.d * __expf(smaller_m.m - bigger_m.m);
+    res.m = bigger_m.m;
+    return res;
+}
+
+template<typename T, int MAX_K>
+struct TopKMD
+{
+    MD md;
+    TopK<T, MAX_K> topk;
+};
+
+template<typename T, int MAX_K>
+__device__ __forceinline__ TopKMD<T, MAX_K> reduce_topk_md_op(const TopKMD<T, MAX_K>& a, const TopKMD<T, MAX_K>& b)
+{
+    TopKMD<T, MAX_K> res;
+    res.md = reduce_md_op(a.md, b.md);
+    res.topk = reduce_topk_op(a.topk, b.topk);
+    return res;
+}
+
+template<typename T, int ITEMS_PER_THREAD, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE)
+__global__ void beam_online_softmax_topk_kernel(
+    const T * __restrict x,                     // log_probs:     [batch_size * beam_width, vocab_size]
+    const T * __restrict b,                     // bias:          [vocab_size]
+    const float * __restrict c,                 // cum_log_probs: [batch_size * beam_width * MAX_K] 
+    const uint8_t  * __restrict finished,       // finished:      [batch_size]
+    int * __restrict z,                         // tmp_ids:       [batch_size * beam_width * MAX_K]
+    T * __restrict v,                           // tmp_vals:      [batch_size * beam_width * MAX_K]
+    int beam_width,                             // - beam_width
+    int V,                                      // - vocab_size
+    int E)                                      // - end ID
+{
+    int thread_id = threadIdx.x;
+    int vector_id = blockIdx.x;
+
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16)? HALF_FLT_MAX : FLT_MAX;
+
+    // reposition y to data for the current vector
+    x += vector_id * V;
+
+    typedef cub::BlockReduce<TopKMD<float, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    TopKMD<float, MAX_K> partial;
+    bool finish = finished[vector_id / beam_width];
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.topk.p[i] = -1;
+        partial.topk.u[i] = -MAX_T_VAL;
+    }
+    partial.md.m = -MAX_T_VAL;
+    partial.md.d = 0.0F;
+
+    if (finish)
+    {
+        for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+        {
+            float elem = (elem_id == E) ? MAX_T_VAL : -MAX_T_VAL;
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+    else
+    {
+        for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+        {
+            float elem = x[elem_id] + b[elem_id];
+            MD new_elem{elem, 1.0F};
+            partial.md = reduce_md_op(partial.md, new_elem);
+            partial.topk.insert(elem, elem_id);
+        }
+    }
+
+    TopKMD<float, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_md_op<float, MAX_K>);
+
+    if (thread_id == 0)
+    {
+        z += vector_id * MAX_K;
+        v += vector_id * MAX_K;
+        c += vector_id;
+
+        float d_total_log = logf(total.md.d);
+        for(int i = 0; i < MAX_K; ++i)
+        {
+            float val = total.topk.u[i] - total.md.m - d_total_log;
+            if (i < MAX_K)
+            {
+                z[i] = total.topk.p[i] + vector_id * V; // faster transformer needs absolute id
+                v[i] = val + c[0];
+            }
+        }
+    }
+}
+
+template<typename T, int MAX_K, int THREADBLOCK_SIZE>
+__launch_bounds__(THREADBLOCK_SIZE)
+__global__ void batch_topk_kernel(
+    const int * __restrict x,     // tmp_ids:      [batch_size*beam_size, MAX_K] 
+    const T * __restrict y,       // tmp_values:   [batch_size*beam_size, MAX_K]
+    int * __restrict z,           // ids:          [batch_size, MAX_K]
+    float * __restrict v,         // values:       [batch_size, MAX_K]
+    int V,                        // - vocab_size
+    T diversity_rate)
+{
+    int thread_id = threadIdx.x;
+    int vector_id = blockIdx.x;
+
+    // reposition x, y to data for the current vector
+    x += vector_id * V;
+    y += vector_id * V;
+
+    typedef cub::BlockReduce<TopK<T, MAX_K>, THREADBLOCK_SIZE> BlockReduce;
+
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    TopK<T, MAX_K> partial;
+    for(int i = 0; i < MAX_K; ++i)
+    {
+        partial.p[i] = -1;
+        partial.u[i] = -FLT_MAX;
+    }
+    for(int elem_id = thread_id; elem_id < V; elem_id += THREADBLOCK_SIZE)
+    {
+        int i = elem_id % MAX_K;
+        T elem = y[elem_id] + diversity_rate * (T) i;
+        int elem_idx = elem_id; //x[elem_id];
+        partial.insert(elem, elem_idx);
+    }
+
+    TopK<T, MAX_K> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_op<T, MAX_K>);
+
+    if (thread_id == 0)
+    {
+        z += vector_id * MAX_K;
+        v += vector_id * MAX_K;
+
+        for(int i = 0; i < MAX_K; ++i)
+        {
+            if (i < MAX_K)
+            {
+                z[i] = x[total.p[i]];
+                v[i] = (float)y[total.p[i]];
+            }
+        }
+    }
+}
+
+template <typename T, int MAX_K>
+void topK_softMax_kernelLauncher(const T* log_probs,          // [batch_size * beam_size, vocab_size]
+                                 const T* bias,               // [vocab_size]
+                                 const uint8_t* finished,     // [batch_size]
+                                 float* cum_log_probs,        // [batch_size, MAX_K]
+                                 int* ids,                    // [batch_size, MAX_K]
+                                 void* temp_storage,
+                                 const int temp_storage_size, 
+                                 const int batch_size,
+                                 const int beam_width,
+                                 const int vocab_size,
+                                 const int end_id,
+                                 T diversity_rate)
+{
+    const int items_per_thread = 1;
+    const int block_sz = (MAX_K < 16)? (MAX_K < 8)? SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE:128:64;
+
+    assert(temp_storage_size % 2 == 0);
+    assert(temp_storage_size >= 2 * batch_size * beam_width * MAX_K);
+
+    const int topk_buf_offset = ceil(batch_size * beam_width * MAX_K / 4.) * 4;
+    int* topk_tmp_id_buf = reinterpret_cast<int *>(temp_storage);
+    T* topk_tmp_val_buf = reinterpret_cast<T *>(topk_tmp_id_buf + topk_buf_offset);
+    //// float* tmp_buffer = reinterpret_cast<float *>(topk_tmp_val_buf + topk_buf_offset);
+
+    std::cout << "SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE:" << SMALL_TOP_K_SOFTMAX_THREADBLOCK_SIZE
+        << "\tSMALL_TOP_K_SOFTMAX_MAX_VOC_PARTS:" << SMALL_TOP_K_SOFTMAX_MAX_VOC_PARTS
+        << "\tMAX_K:" << MAX_K << std::endl;
+
+    std::cout << "items_per_thread:" << items_per_thread << "\tblock_sz:" << block_sz << "\tbatch_size:"
+        << batch_size << "\tbeam_width:" << beam_width << "\tvocab_size:" << vocab_size << "\tend_id:" << end_id << std::endl;
+
+    if (beam_width > 1)
+    {
+        beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz>
+            <<<batch_size * beam_width, block_sz, 0>>>
+                (log_probs, bias, cum_log_probs, finished, topk_tmp_id_buf, 
+                 topk_tmp_val_buf, beam_width, vocab_size, end_id);
+
+        batch_topk_kernel<T, MAX_K, 32><<<batch_size, 32, 0>>> 
+                (topk_tmp_id_buf, topk_tmp_val_buf, ids, 
+                 cum_log_probs, beam_width * MAX_K, diversity_rate);
+    }
+    else
+    {
+        beam_online_softmax_topk_kernel<T, items_per_thread, MAX_K, block_sz>
+            <<<batch_size * beam_width, block_sz, 0>>>
+            (log_probs, bias, cum_log_probs, finished, ids, 
+             cum_log_probs, beam_width, vocab_size, end_id);
+    }
+}
+
+template <typename T>
+void topK_softMax(const T* log_probs,
+                  const T* bias,
+                  const uint8_t* finished,
+                  float* cum_log_probs,
+                  int* ids,
+                  const int K,
+                  void* temp_storage,
+                  const int temp_storage_size,
+                  const int batch_size,
+                  const int beam_width,
+                  const int vocab_size,
+                  const int end_id,
+                  const T diversity_rate)
+{
+    switch(beam_width)
+    {
+        case 1 :
+            switch(K)
+            {
+                case 1:
+                    topK_softMax_kernelLauncher<T, 1>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 2:
+                    topK_softMax_kernelLauncher<T, 2>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 4:
+                    topK_softMax_kernelLauncher<T, 4>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 8:
+                    topK_softMax_kernelLauncher<T, 8>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 10:
+                    topK_softMax_kernelLauncher<T, 10>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 16:
+                    topK_softMax_kernelLauncher<T, 16>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                case 32:
+                    topK_softMax_kernelLauncher<T, 32>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+
+                default :
+                    topK_softMax_kernelLauncher<T, 32>
+                        (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                         batch_size, beam_width, vocab_size, end_id, diversity_rate);
+                    break;
+            }
+            break;
+    
+        case 2 :
+            topK_softMax_kernelLauncher<T, 4>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 3 :
+            topK_softMax_kernelLauncher<T, 6>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 4 :
+            topK_softMax_kernelLauncher<T, 8>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 5 :
+            topK_softMax_kernelLauncher<T, 10>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 8 :
+            topK_softMax_kernelLauncher<T, 16>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 16 :
+            topK_softMax_kernelLauncher<T, 32>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        case 32 :
+            topK_softMax_kernelLauncher<T, 64>
+                    (log_probs, bias, finished, cum_log_probs, ids, temp_storage, temp_storage_size,
+                    batch_size, beam_width, vocab_size, end_id, diversity_rate);
+            break;
+        default :
+            printf("[ERROR] Topk kernel does not support beamwidth = %d \n", beam_width);
+            exit(0);
+            break;
+    }
+}
+
+template void topK_softMax<float>(const float* log_probs,
+                                  const float* bias,
+                                  const uint8_t* finished,
+                                  float* cum_log_probs,
+                                  int* ids,
+                                  const int K,
+                                  void* tmp_storage,
+                                  const int temp_storage_size,
+                                  const int batch_size,
+                                  const int beam_width,
+                                  const int vocab_size,
+                                  const int end_id,
+                                  const float diversity_rate); 
+
+} // namespace fastertransformer_V2    */

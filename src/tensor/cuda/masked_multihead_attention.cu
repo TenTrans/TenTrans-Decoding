@@ -511,7 +511,7 @@ __global__ void masked_multihead_attention_kernel(Masked_multihead_attention_par
 
   // The batch.
   const int bi = blockIdx.y;
-  if(params.finished != nullptr && params.finished[bi / params.beam_size] == 1) return;
+  if(params.finished != nullptr && params.finished[bi / params.beam_size]) return;
   // The head.
   const int hi = blockIdx.x;
   // Combine the batch and the head indices.

@@ -20,19 +20,32 @@
 #include "HUEncoder.h"
 
 #include "HUDecoder.h"
+//#include "HUDecoderState.h"
 #include "HUEncoderDecoder.h"
 #include "HUBeamCell.h"
 #include "HUHistory.h"
 #include "HUNthElement.h"
 #include "HUBeamSearch.h"
 #include "HUResult.h"
+// #include "NMT.h"
 
 #include <cuda_runtime.h>
+/*
+#include <time.h>
+typedef long clock_t;
+#define CLOCKS_PER_SEC ((clock_t)1000)
+*/
+
+/*
+#include "HUShape.h"
+#include "HUTensor.h"
+#include "HUBaseLayer.h"
+#include "HUFFNLayer.h"
+*/
 
 using namespace TenTrans;
 
 int main(int argc, char** argv) {
-
 
     cudaEvent_t allStart, allStop;
     float allElapsedTime = 0.0f;
@@ -69,7 +82,7 @@ int main(int argc, char** argv) {
     // HUPtr<NMT> translator = HUNew<NMT>(config, memPool, device, modelNpz);
     HUPtr<HUEncoderDecoder> encdec = HUNew<HUEncoderDecoder>(config, memPool, device, modelNpz);
     encdec->Init();
-    
+   
     ifstream fin1(argv[3]);
     ofstream fout1(argv[4]);
     // std::vector<std::string> bestResults;
@@ -94,7 +107,8 @@ int main(int argc, char** argv) {
     size_t beamSize = config->get<size_t>("beam-size");
     size_t miniBatch = config->get<size_t>("mini-batch");
     std::cout << "[beam size]: " << beamSize << std::endl;
-    HUPtr<HUBeamSearch> search = HUNew<HUBeamSearch>(config, encdec, beamSize, EOS_ID, UNK_ID, memPool, device);
+    bool earlyStop = config->get<bool>("early-stop");
+    HUPtr<HUBeamSearch> search = HUNew<HUBeamSearch>(config, encdec, beamSize, earlyStop, EOS_ID, UNK_ID, memPool, device);
     while(getline(fin1, source))
     {
         count++; 
@@ -109,6 +123,8 @@ int main(int argc, char** argv) {
             inputs.push_back(source);
             HUPtr<HUTextInput> in = HUNew<HUTextInput>(inputs, srcVocab);
             HUPtr<HUBatch> batch = in->ToBatch(in->ToSents());
+            //// std::vector<HUSentence> sents = in->ToSents();
+            //// HUPtr<HUBatch> batch = in->ToBatch(sents);
             auto batches = batch->data();
         
             size_t batchWidth = batch->batchWidth();
@@ -133,6 +149,24 @@ int main(int argc, char** argv) {
                 fout1 << best1 << "\n";
                 // bestResults.push_back(best1+"\n");
             }
+
+            /*
+            for(int i = 0; i < sents.size(); i++) {
+                HUSentence* ptr = &sents[i];
+                if (ptr != NULL) {
+                    delete ptr;
+                    ptr = NULL;
+                }
+            */
+
+                /*
+                if (sents[i] != NULL) {
+                    delete sents[i];
+                    sents[i] = NULL;
+                }
+
+            }
+            */
 
             cudaEventRecord(stop, 0);
             cudaEventSynchronize(stop);
@@ -161,6 +195,8 @@ int main(int argc, char** argv) {
 
         HUPtr<HUTextInput> in = HUNew<HUTextInput>(inputs, srcVocab);
         HUPtr<HUBatch> batch = in->ToBatch(in->ToSents());
+        //// std::vector<HUSentence> sents = in->ToSents();
+        //// HUPtr<HUBatch> batch = in->ToBatch(sents);
         auto batches = batch->data();
 
         size_t batchWidth = batch->batchWidth();
@@ -183,15 +219,28 @@ int main(int argc, char** argv) {
             fout1 << best1 << "\n";
             // bestResults.push_back(best1+"\n");
         }
-        
+
+        /*
+        for(int i = 0; i < sents.size(); i++) {
+            HUSentence* ptr = &sents[i];
+            if (ptr != NULL) {
+                delete ptr;
+                ptr = NULL;
+            }
+        */
+            /*
+            if (sents[i] != NULL) {
+                delete sents[i];
+                sents[i] = NULL;
+            }
+        }
+        */
+
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsedTime, start, stop);
         std::cout << "Time Cost(ms): " << elapsedTime << "\tcur_batch: " << inputs.size() << std::endl;
         totalCost += elapsedTime;
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
     }
 
     cudaEventRecord(allStop, 0);
@@ -203,9 +252,6 @@ int main(int argc, char** argv) {
     std::cout << "total tokens(source): " << totalTokenNum << std::endl;
     std::cout << "avg time(ms): " << totalCost * 1.0 / count * miniBatch << std::endl;
     std::cout << "speed(token/s): " << totalTokenNum * 1000.0 / totalCost << std::endl;
-
-    cudaEventDestroy(allStop);
-    cudaEventDestroy(allStart);
 
     return 0;
 }

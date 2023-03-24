@@ -10,9 +10,11 @@
 #include <memory>
 #include <sstream>
 
-namespace TenTrans{
+#include <cuda_fp16.h>
 
-namespace gpu{
+namespace TenTrans {
+
+namespace gpu {
 
 template <typename T>
 void copy(HUPtr<HUDevice> device, const T* begin, const T* end, T* dest);
@@ -20,13 +22,11 @@ void copy(HUPtr<HUDevice> device, const T* begin, const T* end, T* dest);
 template <typename T>
 void fill(HUPtr<HUDevice> device, T* begin, T* end, T value);
 
-void fill(HUPtr<HUDevice> device, float* begin, float* end, float value);
-
-void alloc(float* data, size_t bufSize);
-void free(float* data);
 }
 
-class HUTensor{
+// enum TENSOR_DATA_TYPE {TT_INT32, TT_INT8, TT_FLOAT32, TT_FLOAT16, TT_DOUBLE};
+
+class HUTensor {
 private:
 	// memory space used in this tensor
 	HUPtr<HUMemoryPiece> memory_;
@@ -34,26 +34,25 @@ private:
 	HUShape shape_;
 	HUPtr<HUDevice> device_;
 	HUPtr<HUMemPool> mem_ = NULL;
+    TENSOR_DATA_TYPE dataType_ = TENSOR_DATA_TYPE::TT_FLOAT32;
+    int unitSize_ = sizeof(float);
 
 public:
-	//constructor
-	HUTensor(HUPtr<HUMemoryPiece> memory, HUShape shape, HUPtr<HUDevice> device);
-	HUTensor(const int myOrder, const int * myDimSize, HUPtr<HUMemoryPiece> memory, HUPtr<HUDevice> device);
-	HUTensor(const int myOrder, const int * myDimSize, HUPtr<HUMemoryPiece> memory, HUPtr<HUDevice> device, HUPtr<HUMemPool> mem);
+	// constructor
+	HUTensor(HUPtr<HUMemoryPiece> memory, HUShape shape, HUPtr<HUDevice> device, \
+            TENSOR_DATA_TYPE dataType=TENSOR_DATA_TYPE::TT_FLOAT32);
+	HUTensor(const int myOrder, const int * myDimSize, HUPtr<HUMemoryPiece> memory, HUPtr<HUDevice> device, \
+            TENSOR_DATA_TYPE dataType=TENSOR_DATA_TYPE::TT_FLOAT32);
+	HUTensor(const int myOrder, const int * myDimSize, HUPtr<HUMemoryPiece> memory, HUPtr<HUDevice> device, HUPtr<HUMemPool> mem, \
+            TENSOR_DATA_TYPE dataType=TENSOR_DATA_TYPE::TT_FLOAT32);
 	
-	//deconstructor
-	~HUTensor() {
-/*
-#ifdef CUDA_FOUND
-		gpu::free(this->data()); 
-#endif
-*/
-	};
+	// deconstructor
+	~HUTensor() { }
 
 	// reset memory space used in this tensor 
 	virtual void reset(HUPtr<HUMemoryPiece> memory);
 
-	HUPtr<HUMemPool> GetMemPool(){return this->mem_;}
+	HUPtr<HUMemPool> GetMemPool(){ return this->mem_; }
 
 	// get memory piece 
 	virtual HUPtr<HUMemoryPiece> memory();
@@ -64,14 +63,28 @@ public:
 	virtual int order() { return this->shape_.size(); }
 	int& dim(int i){ return this->shape_.dim(i); }
 
+    TENSOR_DATA_TYPE getDataType() { return this->dataType_; }
+
+    void setUnitSize();
+
+    int getUnitSize() { return this->unitSize_; }
+
 	// get data of this tensor
-	virtual float* data();
+    /*
+    template <typename T>
+    virtual T* data();
+    */
+    virtual TT_DATA_TYPE* data();
 
 	// get element number of this tensor
 	virtual size_t size();
 
 	// return scalar value if this tensor is scalar
-	virtual float scalar();
+    /*
+    template <typename T>
+    virtual T scalar();
+    */
+    virtual TT_DATA_TYPE scalar();
 
 	// return backend of this tensor
 	HUPtr<HUDevice> getDevice();
@@ -83,24 +96,49 @@ public:
 	HUTensor subtensor(int offset, int size);
 
 	// get specified value indexed by i
-	float get(size_t i);
+    /*
+    template <typename T>
+    T get(size_t i);
+    */
+    TT_DATA_TYPE get(size_t i);
 
 	void toCuda();
 
-	void set(size_t i, float value);
+    /*
+    template <typename T>
+    void set(size_t i, T value);
+    */
+    void set(size_t i, TT_DATA_TYPE value);
 
 	// get data of this tensor and assign to v
-	void get(std::vector<float>& v);
+    /*
+    template <typename T>
+    void get(std::vector<T>& v);
+    */
+    void get(std::vector<TT_DATA_TYPE>& v);
 
 	// set data of this tensor using params begin and end
-	void set(const float* begin, const float* end);
+    /*
+    template <typename T>
+    void set(const T* begin, const T* end);
+    */
+    void set(const TT_DATA_TYPE* begin, const TT_DATA_TYPE* end);
+
+    // void defaultSet(const void* data, size_t size);
 
 	// set data of this tensor using vector 
-	void set(const std::vector<float>& v);
-    // void set(const std::vector<int>& v);
+    /*
+    template <typename T>
+    void set(const std::vector<T>& v);
+    */
+    void set(const std::vector<float>& v);
 
 	// assign to all data of this tensor with value
-	void set(float value);
+    /*
+    template <typename T>
+    void set(T value);
+    */
+    void set(TT_DATA_TYPE value);
 
 	// copy from other tensor
 	void copyFrom(HUTensor in);

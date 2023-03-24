@@ -68,8 +68,8 @@ void HULayerNorm::Init()
 	auto biasNp = modelNpz_[bias];
 	auto scaleShape = GetShapeByModel(scale, this->modelNpz_);
 	auto biasShape = GetShapeByModel(bias, this->modelNpz_);
-	auto scaleMem = this->memPool_->alloc<float>(scaleShape->elements());
-	auto biasMem = this->memPool_->alloc<float>(biasShape->elements());
+	auto scaleMem = this->memPool_->alloc<TT_DATA_TYPE>(scaleShape->elements());
+	auto biasMem = this->memPool_->alloc<TT_DATA_TYPE>(biasShape->elements());
 
 	this->ln_bias_ = HUNew<HUTensor>(biasMem, *biasShape, device_);
 	this->ln_scale_ = HUNew<HUTensor>(scaleMem, *scaleShape, device_);
@@ -78,7 +78,7 @@ void HULayerNorm::Init()
 	for(size_t dim : scaleNp->shape) {
 		size *= dim;
     }
-	this->ln_scale_->set((float*)scaleNp->data(), (float*)scaleNp->data() + size);
+	this->ln_scale_->set((TT_DATA_TYPE*)scaleNp->data(), (TT_DATA_TYPE*)scaleNp->data() + size);
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][LayerNorm] Loading {} parameters, {}, {}", scale, scaleShape->toString(), this->ln_scale_->debug());
 #endif
@@ -87,7 +87,7 @@ void HULayerNorm::Init()
 	for(size_t dim : scaleNp->shape) {
 		size *= dim;
     }
-	this->ln_bias_->set((float*)biasNp->data(), (float*)biasNp->data() + size);
+	this->ln_bias_->set((TT_DATA_TYPE*)biasNp->data(), (TT_DATA_TYPE*)biasNp->data() + size);
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][LayerNorm] Loading {} parameters, {}, {}", bias, biasShape->toString(), this->ln_bias_->debug());
 #endif    

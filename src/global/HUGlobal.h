@@ -21,8 +21,8 @@
 // #define DECODER_DEBUG
 
 /*** old version ***/
-// #define KERNEL_FUSION
-// #define BIAS_LAYERNORM_FUSION
+////#define KERNEL_FUSION
+////#define BIAS_LAYERNORM_FUSION
 
 // #define DataType  float
 
@@ -38,6 +38,12 @@
 
 #define DECODER_PADDING_OPTIMIZE
 
+#define TOPK_FUSION           // fuse Bias_LogSoftmax, Cum_Logits
+
+// #define USE_NVIDIA_TOPK    // use fastertransformer TopK api, it's worse than Ours' topK api
+
+// #define TOPK_SOFTMAX_FUSION   // fuse Bias_LogSoftmax_cum_logits
+
 // #define MATRIX_FUSION
 
 // #define TIME_CALCULATION
@@ -45,7 +51,17 @@
 #define FAST_GELU
 #define FAST_LAYERNORM
 
+// #define USE_FP16
+
+#ifdef USE_FP16
+    #define TT_DATA_TYPE half
+#else
+    #define TT_DATA_TYPE float
+#endif
+
 namespace TenTrans{
+
+enum TENSOR_DATA_TYPE {TT_INT32, TT_INT8, TT_FLOAT32, TT_FLOAT16, TT_DOUBLE};
 
 static const char *_cudaGetErrorEnum(cudaError error)// cublasStatus_t error)
 {

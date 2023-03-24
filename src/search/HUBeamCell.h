@@ -5,7 +5,7 @@
 
 namespace TenTrans
 {
-// This code draws on memory management part of Marian project
+
 class HUBeamCell
 {
 public:

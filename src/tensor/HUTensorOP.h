@@ -1,13 +1,24 @@
 #pragma once
 #include <cuda_runtime.h>
-#include <iostream>
+#include<iostream>
 #include "HUTensor.h"
 #include "HUFunctional.h"
 #include "masked_multihead_attention.h"
+//using namespace std;
+
+/*
+struct EncoderSelfAttentionBuffer {
+    HUPtr<HUTensor> q_tmp, k_tmp, v_tmp;
+    HUPtr<HUTensor> q_buf, k_buf, v_buf;
+    HUPtr<HUTensor> qk_buf;
+    HUPtr<HUTensor> att_out_transpose_buf;
+};
+*/
 
 namespace TenTrans{
 
 void CopyRowsOP(HUPtr<HUTensor> out, const HUPtr<HUTensor> in, const std::vector<size_t>& indices);
+void CopyRowsOP_V2(HUPtr<HUTensor> out, const HUPtr<HUTensor> in, size_t* indices, int rowsToCopy);
 
 HUPtr<HUTensor> ReshapeOP(HUPtr<HUTensor> in, HUShape shape);
 
@@ -41,10 +52,12 @@ void ProdWithBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> & A, const HUPtr<HUT
 //C= C + bias
 void AddBias(HUPtr<HUTensor> &C, const HUPtr<HUTensor> bias);
 
-void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTensor> B, HUPtr<HUMemPool> mem, bool transA, bool transB, float beta = 0, float scalar = 1);
+void ProdBatchedOP(HUPtr<HUTensor> C, const HUPtr<HUTensor> A, const HUPtr<HUTensor> B, HUPtr<HUMemPool> mem, bool transA, bool transB, float beta=0, float alpha=1);
 
 void SoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> mask = nullptr);
 void LogSoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in);
+void AddBiasLogSoftmaxOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, const HUPtr<HUTensor> bias);
+void AddBiasLogSoftmaxOP_V2(HUPtr<HUTensor> out, HUPtr<HUTensor> in, const HUPtr<HUTensor> bias, const int realDimBatch, uint8_t* isAllDone);
 
 void LayerNormalOP(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> scale, HUPtr<HUTensor> beta=nullptr, float eps=1e-9);
 void LayerNormalOP_V2(HUPtr<HUTensor> out, HUPtr<HUTensor> in, HUPtr<HUTensor> scale, HUPtr<HUTensor> beta=nullptr, float eps=1e-9);
@@ -68,12 +81,12 @@ void Concatenate1OP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& in
 void ConcatContOP(HUPtr<HUTensor> out, const std::vector<HUPtr<HUTensor> >& inputs, int axis);
 
 /* Cross-Attention */
-void CrosssAttentionOP(
+void CrossAttentionOP(
         HUPtr<HUTensor> query_buf, const HUPtr<HUTensor> Q_bias, 
         HUPtr<HUTensor> key_cache, const HUPtr<HUTensor> K_bias, 
         HUPtr<HUTensor> value_cache, const HUPtr<HUTensor> V_bias, 
         HUPtr<HUTensor> lengths, HUPtr<HUTensor> context_buf, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, const uint8_t* isAllDone, 
         const int head_num, const int step);
 
 void Transpose4DBatchMajorOP(
@@ -88,7 +101,7 @@ void MaskedMultiHeadAttentionOP(
         const HUPtr<HUTensor> qkv_buf, const HUPtr<HUTensor> QKV_bias,
         HUPtr<HUTensor> key_cache, HUPtr<HUTensor> value_cache,
         HUPtr<HUTensor> context_buf, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, uint8_t* isAllDone, 
         const int head_num, const int step);
 
 /* Encoder Self-Attention */
@@ -103,7 +116,8 @@ void EncoderUnFusedSelfAttentionOP(
 void UpdateKVBatchMajorCacheOP(
         HUPtr<HUTensor> key_src_cache, HUPtr<HUTensor> key_tgt_cache,
         HUPtr<HUTensor> value_src_cache, HUPtr<HUTensor> value_tgt_cache,
-        const std::vector<size_t> &beams_ids, const int batch_size, const int beam_width,
+        size_t* beams_ids, uint8_t* isAllDone, 
+        const int batch_size, const int beam_width,
         const int head_num, const int step);
 
 void AddBiasInputOP(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input);
@@ -121,6 +135,16 @@ void BroadCastPlusWithBiasOP(HUPtr<HUTensor> &out, HUPtr<HUTensor> log_probs, HU
 
 // void TopKOP(HUPtr<HUTensor> logProbs, const int K, HUPtr<HUTensor> topKIds, HUPtr<HUTensor> topKValues);
 void TopKOP(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int vocab_size);
-void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size);
+// void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size);
+void TopKOP_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size, void* tmp_storage);
+
+void TopKSoftmaxOP(HUPtr<HUTensor> log_probs,
+                   const HUPtr<HUTensor> bias,
+                   std::vector<float> &cum_log_probs,
+                   std::vector<int> &topKIds,
+                   const int K,
+                   void* temp_storage,
+                   const int temp_storage_size,
+                   uint8_t* isAllDone);
 
 } // namespace TenTrans

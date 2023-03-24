@@ -24,7 +24,7 @@ public:
     // HUPtr<HUDecoderState> PrepareForDecoding(HUPtr<HUBatch> batch, HUPtr<HUEncoderState> encState);
 	HUPtr<HUDecoderState> StartDecode_v2(HUPtr<HUBatch> batch, HUPtr<HUEncoderState> encState);
 	void EmbeddingsFromPrediction(HUPtr<HUDecoderState> state, std::vector<size_t>& embIdx, HUPtr<HUEncoderState> encState, int beamSize);
-	HUPtr<HUTensor> Step(HUPtr<HUDecoderState> state, States& decoderStates, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+	HUPtr<HUTensor> Step(HUPtr<HUDecoderState> state, States& decoderStates, int realDimBatch, uint8_t* isAllDone);
 
 public:
 	HUPtr<HUTensor> encoderContext_;

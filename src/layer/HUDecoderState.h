@@ -29,15 +29,15 @@ struct State
     HUPtr<HUTensor> memoryKeys;
     HUPtr<HUTensor> memoryValues;
 
-    State select(const std::vector<size_t>& selIdx, int headNum, int beamSize, int step, 
-            bool isBatchMajor, HUPtr<HUMemPool> memoryPool) const
+    State select(size_t* selIdx, int selIdxSize, uint8_t* isAllDone, int headNum, int beamSize, 
+            int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool) const
     {
 #ifdef SELF_ATTENTION_FUSION
-        return selectBatchMajor(cacheKeys, cacheKeysTmp, cacheValues, cacheValuesTmp, 
-                memoryKeys, memoryValues, selIdx, headNum, beamSize, step, isBatchMajor, memoryPool);
+        return selectBatchMajor(cacheKeys, cacheKeysTmp, cacheValues, cacheValuesTmp, memoryKeys, memoryValues, 
+                selIdx, selIdxSize, isAllDone, headNum, beamSize, step, isBatchMajor, memoryPool);
 #else
         return select(cacheKeys, cacheValues, memoryKeys, memoryValues, 
-                selIdx, headNum, beamSize, step,isBatchMajor, memoryPool);
+                selIdx, selIdxSize, headNum, beamSize, step, isBatchMajor, memoryPool);
 #endif
     }
 
@@ -52,16 +52,16 @@ private:
      *
      */
     static State selectBatchMajor(HUPtr<HUTensor> keys, HUPtr<HUTensor> keysTmp, HUPtr<HUTensor> values, HUPtr<HUTensor> valuesTmp, 
-            HUPtr<HUTensor> memoryK, HUPtr<HUTensor> memoryV, const std::vector<size_t>& selIdx, int headNum, 
-            int beamSize, int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool)
+            HUPtr<HUTensor> memoryK, HUPtr<HUTensor> memoryV, size_t* selIdx, int selIdxSize, uint8_t* isAllDone, 
+            int headNum, int beamSize, int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool)
     {
         int dimBatchBeam = keys->shape()[-3];
         int MAX_SEQ_LEN = keys->shape()[-2];
         int dimModel = keys->shape()[-1];
-        int selIdxSize = selIdx.size();
+        // int selIdxSize = selIdx.size();
 
         HUPtr<HUTensor> newKeys, newKeysTmp, newValues, newValuesTmp;
-        /* beamSize >1, need Update Cache_KV */
+        /* beamSize > 1, need Update Cache_KV */
         if (beamSize > 1)
         {
             // step > 1, dimBatchBeam = batchSize*beamSize 
@@ -71,8 +71,9 @@ private:
                 HUTensorUtil::UpdateKVBatchMajorCache(
                         keys, keysTmp, 
                         values, valuesTmp, 
-                        selIdx, batchSize, 
-                        beamSize, headNum, step);
+                        selIdx, isAllDone, 
+                        batchSize, beamSize, 
+                        headNum, step);
 
                 // exchange
                 newKeys = keysTmp;
@@ -112,8 +113,9 @@ private:
                     HUTensorUtil::UpdateKVBatchMajorCache(
                             repeatKeys, repeatKeysTmp, 
                             repeatValues, repeatValuesTmp, 
-                            selIdx, batchSize, 
-                            beamSize, headNum, step);
+                            selIdx, isAllDone, 
+                            batchSize, beamSize, 
+                            headNum, step);
 
                     // exchange 
                     newKeys = repeatKeysTmp; 
@@ -235,12 +237,12 @@ private:
      *
      */
 	static State select(HUPtr<HUTensor> keys, HUPtr<HUTensor> values, HUPtr<HUTensor> memoryK, HUPtr<HUTensor> memoryV, 
-            const std::vector<size_t>& selIdx, int headNum, int beamSize, int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool) 
+            size_t* selIdx, int selIdxSize, int headNum, int beamSize, int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool) 
     {
         int dimBatchBeam = keys->shape()[-3];
         int dimSteps = keys->shape()[-2];
         int dimModel = keys->shape()[-1];
-        int selIdxSize = selIdx.size();
+        // int selIdxSize = selIdx.size();
         
         HUPtr<HUTensor> selKeys, selValues;
         if (beamSize > 1)    // update Cache_KV
@@ -249,11 +251,13 @@ private:
             if (dimBatchBeam == selIdxSize)
             {
                 keys = HUTensorUtil::Reshape(keys, {selIdxSize, dimSteps*dimModel});
-                selKeys = HUTensorUtil::CopyRows(keys, selIdx, memoryPool);
+                // selKeys = HUTensorUtil::CopyRows(keys, selIdx, memoryPool);
+                selKeys = HUTensorUtil::CopyRows_V2(keys, selIdx, selIdxSize, memoryPool);
                 selKeys = HUTensorUtil::Reshape(selKeys, {selIdxSize, dimSteps, dimModel});
                 
                 values = HUTensorUtil::Reshape(values, {selIdxSize, dimSteps*dimModel});
-                selValues = HUTensorUtil::CopyRows(values, selIdx, memoryPool);
+                // selValues = HUTensorUtil::CopyRows(values, selIdx, memoryPool);
+                selValues = HUTensorUtil::CopyRows_V2(values, selIdx, selIdxSize, memoryPool);
                 selValues = HUTensorUtil::Reshape(selValues, {selIdxSize, dimSteps, dimModel});
             } 
             else
@@ -264,13 +268,15 @@ private:
                     keys = HUTensorUtil::Reshape(keys, {dimBatchBeam, 1, dimSteps, dimModel});
                     HUPtr<HUTensor> repeatKeys = HUTensorUtil::Reshape(HUTensorUtil::Repeat(keys, beamSize, -3, memoryPool),
                             {selIdxSize, dimSteps*dimModel});
-                    selKeys = HUTensorUtil::CopyRows(repeatKeys, selIdx, memoryPool);
+                    // selKeys = HUTensorUtil::CopyRows(repeatKeys, selIdx, memoryPool);
+                    selKeys = HUTensorUtil::CopyRows_V2(repeatKeys, selIdx, selIdxSize, memoryPool);
                     selKeys = HUTensorUtil::Reshape(selKeys, {selIdxSize, dimSteps, dimModel});
 
                     values = HUTensorUtil::Reshape(values, {dimBatchBeam, 1, dimSteps, dimModel});
                     HUPtr<HUTensor> repeatValues = HUTensorUtil::Reshape(HUTensorUtil::Repeat(values, beamSize, -3, memoryPool), 
                             {selIdxSize, dimSteps*dimModel});
-                    selValues = HUTensorUtil::CopyRows(repeatValues, selIdx, memoryPool);
+                    // selValues = HUTensorUtil::CopyRows(repeatValues, selIdx, memoryPool);
+                    selValues = HUTensorUtil::CopyRows_V2(repeatValues, selIdx, selIdxSize, memoryPool);
                     selValues = HUTensorUtil::Reshape(selValues, {selIdxSize, dimSteps, dimModel});
                     
                     memoryPool->free(repeatKeys->memory());
@@ -324,11 +330,11 @@ public:
   void push_back(const State& state) { states_.push_back(state); }
 
   // create updated set of states that reflect reordering and dropping of hypotheses
-  States select(const std::vector<size_t>& selIdx, // [beamIndex * activeBatchSize + batchIndex] 
+  States select(size_t* selIdx, int selIdxSize, uint8_t* isAllDone, // [beamIndex * activeBatchSize + batchIndex] 
           int headNum, int beamSize, int step, bool isBatchMajor, HUPtr<HUMemPool> memoryPool) const {
     States selected;
     for(auto& state : states_) {
-      selected.push_back(state.select(selIdx, headNum, beamSize, step, isBatchMajor, memoryPool));
+      selected.push_back(state.select(selIdx, selIdxSize, isAllDone, headNum, beamSize, step, isBatchMajor, memoryPool));
     }
     return selected;
   }
@@ -363,16 +369,21 @@ public:
 		if(states_.size() == 0) {
 			return;
         }
+
+        // memPool_->free(logProbs_->memory());
+
 #ifdef SELF_ATTENTION_FUSION
         memPool_->free(logProbs_->memory());
 #else
 		memPool_->free(logProbs_->memory());
         for(int i=0; i < states_.size(); i++) 
         {
+            // std::cout << ">>>>>>>> wkx <<<<<<<<" << std::endl;
             memPool_->free((states_[i].cacheKeys)->memory());
             memPool_->free((states_[i].cacheValues)->memory());
         }
 #endif
+
 	}
 
     void FinalFree() 
@@ -392,6 +403,8 @@ public:
         auto encMask = encState_->getMask();
         memPool_->free(encMask->memory());
 
+        memPool_->free(logProbs_->memory());
+
         for(int i = 0; i < states_.size(); i++)
         {
             memPool_->free((states_[i].memoryKeys)->memory());
@@ -402,6 +415,9 @@ public:
             memPool_->free((states_[i].cacheValues)->memory());
             memPool_->free((states_[i].cacheKeysTmp)->memory());
             memPool_->free((states_[i].cacheValuesTmp)->memory());
+    #else
+            memPool_->free((states_[i].cacheKeys)->memory());
+            memPool_->free((states_[i].cacheValues)->memory());
     #endif
         }
     }
@@ -413,9 +429,11 @@ public:
 	virtual HUPtr<HUTensor> getLogProbs() const { return logProbs_; }
 	virtual void setLogProbs(HUPtr<HUTensor> logProbs) { logProbs_ = logProbs; }
 	
-	virtual HUPtr<HUDecoderState> select(const std::vector<size_t>& selIdx, int beamSize, HUPtr<HUMemPool> memoryPool) const 
+	virtual HUPtr<HUDecoderState> select(size_t* selIdx, int selIdxSize, uint8_t* isAllDone, 
+            int beamSize, HUPtr<HUMemPool> memoryPool) const 
     {
-    	auto selectedState = HUNew<HUDecoderState>(states_.select(selIdx, heads_, beamSize, position_, /*isBatchMajor=*/true, memoryPool), logProbs_, encState_, batch_, heads_, memoryPool);
+    	auto selectedState = HUNew<HUDecoderState>(states_.select(selIdx, selIdxSize, isAllDone, heads_, beamSize, 
+                    position_, /*isBatchMajor=*/true, memoryPool), logProbs_, encState_, batch_, heads_, memoryPool);
 
     	// Set positon of new state based on the target token position of current state
     	selectedState->setPosition(getPosition());

@@ -1,9 +1,3 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/9
- *
- */
 
 #include "HUOutputLayer.h"
 #include "HUTensorUtil.h"
@@ -52,8 +46,8 @@ void HUOutputLayer::Init()
 	auto WShape = GetShapeByModel(WParam, this->modelNpz_);
 	auto bShape = GetShapeByModel(bParam, this->modelNpz_);
 
-	auto WMem = this->memPool_->alloc<float>(WShape->elements());
-	auto bMem = this->memPool_->alloc<float>(bShape->elements());
+	auto WMem = this->memPool_->alloc<TT_DATA_TYPE>(WShape->elements());
+	auto bMem = this->memPool_->alloc<TT_DATA_TYPE>(bShape->elements());
 
 	this->W_ = HUNew<HUTensor>(WMem, *WShape, device_);
 	this->b_ = HUNew<HUTensor>(bMem, *bShape, device_);
@@ -62,13 +56,13 @@ void HUOutputLayer::Init()
     for(size_t dim: WNp->shape) {
         size *= dim;
     }
-    this->W_->set((float*)WNp->data(), (float*)WNp->data() + size);
+    this->W_->set((TT_DATA_TYPE*)WNp->data(), (TT_DATA_TYPE*)WNp->data() + size);
 
 	size = 1;
 	for(size_t dim: bNp->shape) {
 		size *= dim;
     }
-	this->b_->set((float*)bNp->data(), (float*)bNp->data() + size);
+	this->b_->set((TT_DATA_TYPE*)bNp->data(), (TT_DATA_TYPE*)bNp->data() + size);
 
 #ifdef DEBUG_MOD
 	LOG(trace, "[TenTrans][OutputLayer] Loading {} parameters, {}", WParam, this->W_->debug());

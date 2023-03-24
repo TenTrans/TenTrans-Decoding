@@ -26,11 +26,11 @@ public:
 	HUPtr<HUTensor> Forward(HUPtr<HUTensor> batchEmbedding, HUPtr<HUTensor> batchMask);
     HUPtr<HUTensor> ForwardFusedEncoderSelfAttention(HUPtr<HUTensor> batchEmbedding, HUPtr<HUTensor> batchMask, EncoderSelfAttentionBuffer &params);
 
-	HUPtr<HUTensor> DecoderLayerSelfAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+	HUPtr<HUTensor> DecoderLayerSelfAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos, int realDimBatch, uint8_t* isAllDone);
     HUPtr<HUTensor> DecoderLayerSelfAttention_V2(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> input, HUPtr<HUTensor> selfMask, int startPos);
 
     // HUPtr<HUTensor> DecoderLayerCrossAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> q, const HUPtr<HUTensor> &memory, const HUPtr<HUTensor> &mask, int startPos);
-   HUPtr<HUTensor> DecoderLayerCrossAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> q, const HUPtr<HUTensor> &memory, const HUPtr<HUTensor> &mask, HUPtr<HUTensor> &lengths, int startPos, const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone);
+   HUPtr<HUTensor> DecoderLayerCrossAttention(State& decoderLayerState, const State& prevdecoderLayerState, HUPtr<HUTensor> q, const HUPtr<HUTensor> &memory, const HUPtr<HUTensor> &mask, HUPtr<HUTensor> &lengths, int startPos, int realDimBatch, uint8_t* isAllDone);
 
    HUPtr<HUTensor> GetSelfAttentionOutputBias() { return this->self_bo; };
    HUPtr<HUTensor> GetCrossAttentionOutputBias() { return this->context_bo; };

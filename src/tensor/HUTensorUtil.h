@@ -6,7 +6,7 @@
 #include "HUTensor.h"
 #include "cnpy.h"
 #include "HUTensorOP.h"
-// #include "nvidia_export/attention_kernels.cuh"
+#include "nvidia_export/attention_kernels.cuh"
 //using namespace std;
 
 
@@ -78,6 +78,7 @@ public:
 	static HUPtr<HUTensor> Softmax(HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> mask = nullptr);
 
 	static HUPtr<HUTensor> LogSoftmax(HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
+    static HUPtr<HUTensor> AddBiasLogSoftmax(HUPtr<HUTensor> in, const HUPtr<HUTensor> bias, const int realDimBatch, uint8_t* isAllDone, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
 
 	static HUPtr<HUTensor> LayerNormalization(HUPtr<HUTensor> in, HUPtr<HUTensor> gamma, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> beta=nullptr, float eps=1e-9);
     static HUPtr<HUTensor> AddBiasInputLayerNormalization(HUPtr<HUTensor> in, HUPtr<HUTensor> x, const HUPtr<HUTensor> bias, HUPtr<HUTensor> gamma, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> beta=nullptr, float eps=1e-9);
@@ -96,13 +97,14 @@ public:
 	static HUPtr<HUTensor> Reshape(HUPtr<HUTensor> in, HUShape shape);
 
 	static HUPtr<HUTensor> CopyRows(HUPtr<HUTensor> in, const std::vector<size_t>& indices, HUPtr<HUMemPool> mem);
+    static HUPtr<HUTensor> CopyRows_V2(HUPtr<HUTensor> in, size_t* indices, int num, HUPtr<HUMemPool> mem);
 
 	static HUPtr<HUTensor> Concatenate(std::vector<HUPtr<HUTensor> > nodes, int ax, HUPtr<HUMemPool> mem);
     static void Split(HUPtr<HUTensor> in, int num, std::vector<HUPtr<HUTensor> > &nodes, HUPtr<HUMemPool> mem, int ax=-1);
 
 	static HUPtr<HUTensor> Repeat(HUPtr<HUTensor> a, size_t repeats, int ax, HUPtr<HUMemPool> mem);
 
-	static HUPtr<HUTensor> ConstantFloat(HUShape inShape, std::vector<float> data, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
+	static HUPtr<HUTensor> ConstantFloat(HUShape inShape, std::vector<TT_DATA_TYPE> data, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
 
     // out = in
     static void CopyFrom(HUPtr<HUTensor> &out, HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
@@ -124,10 +126,10 @@ public:
     static HUPtr<HUTensor> FusedQKVSelfAttention(
             const HUPtr<HUTensor> qkv_buf, const HUPtr<HUTensor> QKV_bias,
             HUPtr<HUTensor> key_cache, HUPtr<HUTensor> value_cache, 
-            const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+            const int realDimBatch, uint8_t* isAllDone, 
             const int head_num, const int step,  
             HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
-    
+   
     static HUPtr<HUTensor> EncoderUnFusedSelfAttention(
             HUPtr<HUTensor> input, HUPtr<HUTensor> att_mask,
             const HUPtr<HUTensor> Q, const HUPtr<HUTensor> Q_bias, 
@@ -142,7 +144,7 @@ public:
             HUPtr<HUTensor> key_cache, const HUPtr<HUTensor> K_bias, 
             HUPtr<HUTensor> value_cache, const HUPtr<HUTensor> V_bias, 
             HUPtr<HUTensor> lengths, 
-            const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+            const int realDimBatch, const uint8_t* isAllDone, 
             const int head_num, const int step, 
             HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
 
@@ -154,8 +156,8 @@ public:
     static void UpdateKVBatchMajorCache(
         HUPtr<HUTensor> key_src_cache, HUPtr<HUTensor> key_tgt_cache,
         HUPtr<HUTensor> value_src_cache, HUPtr<HUTensor> value_tgt_cache,
-        const std::vector<size_t> &beams_ids, const int batch_size, 
-        const int beam_width, const int head_num, const int step);
+        size_t* beams_ids, uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, const int head_num, const int step);
 
     // output = output + input + bias
     static void AddBiasInput(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input);
@@ -169,7 +171,18 @@ public:
     static HUPtr<HUTensor> BroadCastPlusWithBias(HUPtr<HUTensor> log_probs, HUPtr<HUTensor> cum_log_probs, const HUPtr<HUTensor> bias,  HUPtr<HUMemPool> mem, HUPtr<HUDevice> device);
 
     static void TopK(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int vocab_size);
-    static void TopK_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size);
+    // static void TopK_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size);
+
+    static void TopK_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size, void* tmp_storage);
+
+    static void TopKSoftmax(HUPtr<HUTensor> log_probs,
+                            const HUPtr<HUTensor> bias,
+                            std::vector<float> &cum_log_probs,
+                            std::vector<int> &topKIds,
+                            const int K,
+                            void* temp_storage,
+                            const int temp_storage_size,
+                            uint8_t* isAllDone); 
 
     // static void TopK(HUPtr<HUTensor> logProbs, const int K, HUPtr<HUTensor> topKIds, HUPtr<HUTensor> topKValues);
 }; // class HUTensorUtil

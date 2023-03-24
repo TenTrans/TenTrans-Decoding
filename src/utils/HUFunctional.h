@@ -192,23 +192,23 @@ struct HUTensor {
 
   __H__ HUTensor(HUPtr<TenTrans::HUTensor> t) : data_(t->data()), shape_(t->shape()) { }
 
-  __HDI__ float& operator[](size_t i) { return data_[i]; }
-  __HDI__ const float& operator[](size_t i) const { return data_[i]; }
+  __HDI__ T& operator[](size_t i) { return data_[i]; }
+  __HDI__ const T& operator[](size_t i) const { return data_[i]; }
 
-  __HDI__ float& GetItemByIndices(const int *indices) {
+  __HDI__ T& GetItemByIndices(const int *indices) {
     return data_[shape_.index(indices)];
   }
 
-  __HDI__ const float& GetItemByIndices(const int *indices) const {
+  __HDI__ const T& GetItemByIndices(const int *indices) const {
     return data_[shape_.index(indices)];
   }
 
-  __HDI__ float& operator[](
+  __HDI__ T& operator[](
       const Functional::Array<int, 4>& indices) {
     return data_[shape_.index(indices)];
   }
 
-  __HDI__ const float& operator[](
+  __HDI__ const T& operator[](
       const Functional::Array<int, 4>& indices) const {
     return data_[shape_.index(indices)];
   }

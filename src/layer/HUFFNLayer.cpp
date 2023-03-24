@@ -1,9 +1,3 @@
-/*
- * Author: Danielkxwu
- * E-mial: danielkxwu@tencent.com
- * Created Date: 2021/4/8
- *
- */
 
 #include "HUFFNLayer.h"
 #include "HUTensorUtil.h"
@@ -67,7 +61,7 @@ void HUFFNLayer::NewBySuffix(FFNEnum e, string param)
 {
     HUPtr<HUShape> shape;
     shape = GetShapeByModel(this->prefix_ + param, this->modelNpz_);
-    auto mem = this->memPool_->alloc<float>(shape->elements());
+    auto mem = this->memPool_->alloc<TT_DATA_TYPE>(shape->elements());
 #ifdef DEBUG_MOD
     LOG(trace, "[TenTrans][FFNLayer] Loading {} parameters, {}", this->prefix_ + param, shape->toString());
 #endif
@@ -103,16 +97,16 @@ void HUFFNLayer::InitBySuffix(FFNEnum e, string param)
     switch(e)
     {
         case W1:
-            this->ffn_W1->set((float*)np->data(), (float*)np->data() + size);
+            this->ffn_W1->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
             break;
         case W2:
-            this->ffn_W2->set((float*)np->data(), (float*)np->data() + size);
+            this->ffn_W2->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
             break;
         case b1:
-            this->ffn_b1->set((float*)np->data(), (float*)np->data() + size);
+            this->ffn_b1->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
             break;
         case b2:
-            this->ffn_b2->set((float*)np->data(), (float*)np->data() + size);
+            this->ffn_b2->set((TT_DATA_TYPE*)np->data(), (TT_DATA_TYPE*)np->data() + size);
             break;
         default:
             ABORT("[TenTrans] [Error] '{}' is not in our parameter lists", (param).c_str());

@@ -38,7 +38,7 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
         */
 
         // std::cout << "[beamSize]: " << beamSize_ << "[curMaxLen]: " << curMaxLen << std::endl;
-        auto history = HUNew<HUHistory>(sentId, curMaxLen-1, beamSize_, alpha);   // single-sentence history
+        auto history = HUNew<HUHistory>(sentId, curMaxLen-1, beamSize_, earlyStop_, alpha);   // single-sentence history
         histories.push_back(history);
     }
     // std::cout << "[maxStep]: " << maxStep << std::endl;
@@ -50,24 +50,48 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
     /* Get Nbest, topK=2*localBeamSize */
     int topK = (this->beamSize_ == 1) ? 1 : 2*this->beamSize_;
     auto getNBestList = createGetNBestListFn(topK, dimBatch, device_->getDeviceId());
+#ifdef USE_NVIDIA_TOPK
+    cudaSetDevice(device_->getDeviceId().no);
+    void* tmp_storage;
+    cudaMalloc(&tmp_storage, (int)(ceil(dimBatch * this->beamSize_ * topK / 4.) * 4 * 2) * sizeof(int)); 
+#endif
 
     bool isFirstStep = true;
     auto curState = encdec_->PrepareForDecoding(batch);   // HUPtr<HUDecoderState>, first DecoderState for decoding
 
     size_t curStep = 1;
-    std::vector<bool> isAllDone(dimBatch, false);
-    std::vector<uint8_t> isAllDoneCopy(dimBatch, 0);
+    std::vector<uint8_t> isAllDone(dimBatch, 0);
+    //// std::vector<uint8_t> isAllDoneCopy(dimBatch, 0);
    
     /* used for early stop */
     uint8_t* isAllDoneDevice = nullptr;
+    //// bool* isAllDoneDevice = nullptr;
 #ifdef DECODER_PADDING_OPTIMIZE
     cudaSetDevice(device_->getDeviceId().no);
+    /*
     cudaMalloc(&isAllDoneDevice, isAllDoneCopy.size() * sizeof(uint8_t));
     cudaMemcpy(isAllDoneDevice, isAllDoneCopy.data(), isAllDoneCopy.size() * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    */
+    cudaMalloc(&isAllDoneDevice, isAllDone.size() * sizeof(uint8_t));
+    cudaMemcpy(isAllDoneDevice, isAllDone.data(), isAllDone.size() * sizeof(uint8_t), cudaMemcpyHostToDevice);
 #endif
    
     // avoid long decoding steps
     maxStep = maxStep > MAX_DECODER_STEPS ? MAX_DECODER_STEPS : maxStep;
+
+#ifdef TOPK_SOFTMAX_FUSION
+    int temp_storage_size = (int)(ceil(dimBatch * this->beamSize_ * topK / 4.) * 4 * 2) + (int)(ceil(dimBatch * this->beamSize_ * 128 /*SMALL_TOP_K_SOFTMAX_MAX_VOC_PARTS*/ * (2 * topK + 2) / 4.) * 4); 
+    std::cout << "tmp_storage_size: " << temp_storage_size << std::endl;
+    void* temp_storage = nullptr;
+    cudaSetDevice(device_->getDeviceId().no);
+    cudaMalloc(&temp_storage, temp_storage_size * sizeof(int));
+
+    std::vector<int> outKeys(dimBatch*topK, 0);
+    std::vector<float> outPathScores(dimBatch*topK, 0.f);
+#endif
+
+    size_t* hypIndicesDevice;
+    cudaMalloc(&hypIndicesDevice, dimBatch * beamSize_ * sizeof(size_t));
     while(curStep < maxStep)
     {
         std::vector<size_t> hypIndices;     // [dimBatch*dimBeam] of previousState indices
@@ -76,12 +100,15 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
 
         if (isFirstStep)
         {
+#ifdef TOPK_SOFTMAX_FUSION
+#else
             /* [dimBatch*dimBeam, 1], dimBeam=1 if isFirstStep=True */
             curPathScores = HUTensorUtil::Zeros({dimBatch, 1}, memPool_, device_);
+#endif   // TOPK_SOFTMAX_FUSION    
         }
         else
         {
-            std::vector<float> beamScores;
+            std::vector<TT_DATA_TYPE> beamScores;
             for (size_t sentId = 0; sentId < dimBatch; sentId++) {
                 auto& beam = batchBeams[sentId];
                 // auto& beam = newBatchBeams[sentId];
@@ -94,6 +121,10 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
                     hypIndices.push_back(prevStateId);
                     embIndices.push_back(wordId);
                     beamScores.push_back(pathScore);
+
+#ifdef TOPK_SOFTMAX_FUSION
+                    outPathScores[sentId*beamSize_ + beamId] = pathScore;
+#endif
                     // std::cout << "previousIdx: " << prevStateId << "\t" << "embIdx: " << wordId << "\t" << "scores: " << pathScore << std::endl;
                     /*
                     hypIndices.push_back((size_t)hyp->GetPrevStateIndex()); 
@@ -102,13 +133,20 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
                     std::cout << "previousIdx: " << hyp->GetPrevStateIndex() << "\t" << "embIdx: " << hyp->GetWord() << "\t" << "scores: " << hyp->GetPathScore() << std::endl; */
                 }
             }
+ #ifdef TOPK_SOFTMAX_FUSION
+ #else
             curPathScores = HUTensorUtil::ConstantFloat({(int)dimBatch*beamSize_, 1}, beamScores, memPool_, device_);
+ #endif  // TOPK_SOFTMAX_FUSION
+
+            cudaMemcpy(hypIndicesDevice, hypIndices.data(), hypIndices.size() * sizeof(size_t), cudaMemcpyHostToDevice);
         }
 
         // cudaSetDevice(key_src_cache->getDeviceId().no);
         // CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDone.data(), isAllDone.size() * sizeof(bool), cudaMemcpyHostToDevice));
 
-        auto state = encdec_->Step(curState, hypIndices, embIndices, beamSize_, isAllDoneCopy, isAllDoneDevice);
+        //// auto state = encdec_->Step(curState, hypIndices, embIndices, beamSize_, dimBatch, isAllDoneDevice);
+        auto state = encdec_->Step(curState, hypIndicesDevice, hypIndices.size(), embIndices, beamSize_, dimBatch, isAllDoneDevice);
+
         curState->Free();
         curState = state;
 #ifdef DECODER_DEBUG
@@ -120,11 +158,21 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
 #endif
         /* [dimBatch*dimBeam, dimTgtWords] */
         auto curLogits = state->getLogProbs();
-        // auto pathScores = HUTensorUtil::Plus(curPathScores, curLogits, memPool_, device_);
 
+#ifdef TOPK_SOFTMAX_FUSION
+        int dimTgtWords = curLogits->shape()[-1];
+        HUTensorUtil::TopKSoftmax(curLogits, this->encdec_->GetOutputLayerBias(), outPathScores, 
+                outKeys, topK, temp_storage, temp_storage_size, isAllDoneDevice);
+
+#else   // TOPK_SOFTMAX_FUSION 
         HUPtr<HUTensor> pathScores;
         if (this->beamSize_ > 1) {
+            //// pathScores = HUTensorUtil::BroadCastPlus(curLogits, curPathScores, memPool_, device_);
+#ifdef TOPK_FUSION
             pathScores = HUTensorUtil::BroadCastPlus(curLogits, curPathScores, memPool_, device_);
+#else
+            pathScores = HUTensorUtil::Plus(curPathScores, curLogits, memPool_, device_);
+#endif 
         }
         else {
             pathScores = HUTensorUtil::BroadCastPlusWithBias(curLogits, curPathScores, 
@@ -146,9 +194,21 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
         LOG(trace, "[TenTrans][HUBeamSearch] Search, [after Plus] curPathScores {}", curPathScores->debug());
 #endif
 
+#ifdef USE_NVIDIA_TOPK 
+        std::vector<int> outKeys(dimBatch*topK, 0);
+        std::vector<float> outPathScores(dimBatch*topK, 0.f);
+        HUTensorUtil::TopK_V2(curPathScores, outKeys, outPathScores, topK, dimTgtWords, tmp_storage);
+#else
         std::vector<size_t> batchTopKs(dimBatch, topK);             // [dimBatch, topK], topK=2*beamSize in transformer
         std::vector<unsigned int> outKeys;                          // [dimBatch * topK], record topK word indices
         std::vector<float> outPathScores;                           // [dimBatch * topK], record topK path scores
+        getNBestList(batchTopKs, curPathScores, outPathScores, outKeys, true);
+        // std::cout << "USE [getNbestList].. " << std::endl;
+#endif
+
+        //// std::vector<size_t> batchTopKs(dimBatch, topK);             // [dimBatch, topK], topK=2*beamSize in transformer
+        //// std::vector<unsigned int> outKeys;                          // [dimBatch * topK], record topK word indices
+        //// std::vector<float> outPathScores;                           // [dimBatch * topK], record topK path scores
 
         /*
         cudaEvent_t start, stop;
@@ -160,7 +220,7 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
 
         /* curPathScores: [dimBatch, dimBeam*dimTgtWords] */
         // LOG(trace, "[TenTrans][HUBeamSearch] Search, curPathScores {}", curPathScores->debug());
-        getNBestList(batchTopKs, curPathScores, outPathScores, outKeys, true);
+        //// getNBestList(batchTopKs, curPathScores, outPathScores, outKeys, true);
         // this->memPool_->free(curPathScores->memory());
         /*
         std::cout << "topks" << std::endl;
@@ -219,6 +279,7 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
             std::cout << float(outPathScores[i]) << " ";
         std::cout << std::endl;
         */
+#endif // TOPK_SOFTMAX_FUSION 
 
         Beams newBatchBeams(dimBatch);
         for (size_t sentId = 0; sentId < dimBatch; sentId++)
@@ -242,7 +303,17 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
                 if (!isFirstStep) {
                     tmpDimBeam = beamSize_;
                 }
-                size_t beamIdx = (size_t)((outKeys[sentId * topK + i] - sentId * tmpDimBeam * dimTgtWords) / dimTgtWords);   // previous beam_index
+ #ifdef TOPK_SOFTMAX_FUSION
+                size_t beamIdx = (size_t)((outKeys[sentId * topK + i] - 
+                            sentId * tmpDimBeam * dimTgtWords) / dimTgtWords);   // previous beam_index
+ #else  // TOPK_SOFTMAX_FUSION
+ #ifdef USE_NVIDIA_TOPK
+                size_t beamIdx = (size_t)(outKeys[sentId * topK + i] / dimTgtWords);
+ #else
+                size_t beamIdx = (size_t)((outKeys[sentId * topK + i] - 
+                            sentId * tmpDimBeam * dimTgtWords) / dimTgtWords); // previous beam_index
+ #endif
+ #endif // TOPK_SOFTMAX_FUSION
                 size_t embIdx = (size_t)(outKeys[sentId * topK + i] % dimTgtWords);                             // current word_index
                 float pathScore = outPathScores[sentId * topK + i];
                 // std::cout << "[BeamSearch sentId] "<< sentId << std::endl;
@@ -307,15 +378,30 @@ HUHistories HUBeamSearch::Search(HUPtr<HUBatch> batch)
         }
 
 #ifdef DECODER_PADDING_OPTIMIZE
+        /*
         for (int i = 0; i < isAllDone.size(); i++) {
             isAllDoneCopy[i] = (uint8_t)isAllDone[i];
-        }
+        } 
         cudaMemcpy(isAllDoneDevice, isAllDoneCopy.data(), isAllDoneCopy.size() * sizeof(uint8_t), cudaMemcpyHostToDevice);
+        */
+        cudaMemcpy(isAllDoneDevice, isAllDone.data(), isAllDone.size() * sizeof(uint8_t), cudaMemcpyHostToDevice);
 #endif
 
     }
-    curState->Free();
+    // curState->Free();
     curState->FinalFree();
+
+    cudaFree(hypIndicesDevice);
+
+#ifdef TOPK_SOFTMAX_FUSION
+     cudaFree(temp_storage);
+#endif
+
+#ifdef USE_NVIDIA_TOPK
+    //// void* tmp_storage;
+    //// CUDA_CHECK(cudaMalloc(&tmp_storage, batch_size * topK * 32 * sizeof(int)));
+    cudaFree(tmp_storage);
+#endif
 
 #ifdef DECODER_PADDING_OPTIMIZE
     cudaFree(isAllDoneDevice);

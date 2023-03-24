@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-set(CMAKE_CXX_FLAGS " -std=c++11 -fPIC -msse4.2 -w -march=native -Wno-enum-compare -Wno-sign-compare -Wno-format -Wno-dev -O3 -DNDEBUG -rdynamic ")
+set(CMAKE_CXX_FLAGS " -std=c++11 -fPIC -msse4.2 -w -march=native -Wno-enum-compare -Wno-sign-compare -Wno-format -Wno-dev -O3 -DUSE_FP16 -DNDEBUG -rdynamic ")
 
 # set(EXT_LIBS ${EXT_LIBS} ${CUDA_cublas_LIBRARY})
 
@@ -28,6 +28,9 @@ include_directories(${CUDA_INCLUDE_DIRS})
 ADD_DEFINITIONS(-D CUDA_FOUND)
 set(EXT_LIBS ${EXT_LIBS} ${CUDA_cublas_LIBRARY})
 
+set(BOOST_INCLUDE "/dockerdata/danielkxwu/envs/boost_1_66_0")
+set(BOOST_LIBRARY_PATH "/dockerdata/danielkxwu/envs/boost_1_66_0/lib/")
+
 find_package(Boost)
 if(Boost_FOUND)
 	include_directories(${Boost_INCLUDE_DIRS})
@@ -37,10 +40,14 @@ else(Boost_FOUND)
 	message(SEND_ERROR "Cannot find Boost libraries. Terminating.")
 endif(Boost_FOUND)
 
+set(FASTER_TENSOR_INCLUDE "/dockerdata/danielkxwu/Decoder/src.nmt/nvidia_export/")
+
+add_subdirectory(3rd_party)
+
 include_directories(.)
 include_directories(FASTER_TENSOR_INCLUDE)
 include_directories(BOOST_INCLUDE)
-include_directories(./3rd_party/yaml-cpp/include/)
+include_directories(./3rd_party)
 include_directories(./3rd_party/cnpy/)
 include_directories(./3rd_party/spdlog/include/)
 
@@ -52,6 +59,7 @@ include_directories(./layer/)
 include_directories(./utils/)
 include_directories(./mem/)
 include_directories(./search/)
+# include_directories(./cuda/)
 include_directories(./tensor/cuda/)
 include_directories(./tensor/)
 include_directories(./task/)
@@ -116,7 +124,8 @@ add_library(TenTrans STATIC
 	./tensor/HUTensor.cpp
 	./tensor/HUTensorUtil.cpp
     ./search/HUResult.cpp
-	./3rd_party/cnpy/cnpy.cpp)
+	./3rd_party/cnpy/cnpy.cpp
+    $<TARGET_OBJECTS:libyaml-cpp>)
 
 cuda_add_library(TenTrans_cuda 
 	./device/HUDevice.cu 
@@ -124,19 +133,20 @@ cuda_add_library(TenTrans_cuda
     ./tensor/HUTensor.cu
 	./tensor/HUTensorOP.cu 
     ./tensor/cuda/masked_multihead_attention.cu
-	STATIC)
+    STATIC)
 # ./tensor/cuda/online_softmax_beamsearch_kernels.cu
 # ./tensor/cuda/cuda_kernels.cu
 link_directories("../lib")
 
-add_executable(TenTrans_test main.cpp)
-set_target_properties(TenTrans_test PROPERTIES OUTPUT_NAME TenTrans_test)
+target_link_libraries(TenTrans_cuda TenTrans)
+#### add_executable(TenTrans_test main.cpp)
+#### set_target_properties(TenTrans_test PROPERTIES OUTPUT_NAME TenTrans_test)
 
 ## add_executable(TenTrans_xlm main_xlm.cpp)
 ## set_target_properties(TenTrans_xlm PROPERTIES OUTPUT_NAME TenTrans_xlm)
 
-target_link_libraries(TenTrans_test TenTrans TenTrans_cuda libboost_filesystem.a libboost_program_options.a libboost_regex.a libboost_system.a libyaml-cpp.a ${EXT_LIBS} ${CUDA_LIB_PATH} )
-cuda_add_cublas_to_target(TenTrans_test)
+#### target_link_libraries(TenTrans_test TenTrans TenTrans_cuda libboost_filesystem.a libboost_program_options.a libboost_regex.a libboost_system.a libyaml-cpp.a ${EXT_LIBS} ${CUDA_LIB_PATH} )
+## cuda_add_cublas_to_target(TenTrans_test)
 
 ## target_link_libraries(TenTrans_xlm TenTrans TenTrans_cuda libboost_filesystem.a libboost_program_options.a libboost_regex.a libboost_system.a libyaml-cpp.a ${EXT_LIBS} ${CUDA_LIB_PATH} )
 ## cuda_add_cublas_to_target(TenTrans_xlm)

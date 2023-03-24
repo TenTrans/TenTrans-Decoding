@@ -23,7 +23,6 @@ public:
 	void Init();
 	HUPtr<HUEncoderState> Forward(HUPtr<HUBatch> batch);
     // void Forward_test(HUPtr<HUBatch> batch);
-    //
 
 public:
 	HUPtr<HUEmbeddingLayer> embedding_;

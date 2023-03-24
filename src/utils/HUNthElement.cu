@@ -12,12 +12,14 @@ namespace TenTrans{
     }                                    \
   }
 
-__global__ void gMaxElement(float* d_out,
+template <typename T>
+__global__ void gMaxElement(T* d_out, /* float* d_out*/
                             int* d_ind,
-                            float* d_in,
+                            T* d_in,
                             int numBatches,
                             int* batchFirstElementIdxs) {
-  extern __shared__ float sdata[];
+  // extern __shared__ float sdata[];
+  extern __shared__ T sdata[];
   __shared__ int indices[512];
 
   int tid = threadIdx.x;
@@ -28,16 +30,20 @@ __global__ void gMaxElement(float* d_out,
 
     int i = begin + blockIdx.x * (blockDim.x * 2) + tid;
 
-    sdata[tid] = -3.40282e+38f;
+    // sdata[tid] = -3.40282e+38f;
+    sdata[tid] = (T)-10000;
 
     if(i < end) {
+      // sdata[tid] = (float)d_in[i];
       sdata[tid] = d_in[i];
       indices[tid] = i;
     }
 
     if(i + blockDim.x < end) {
-      float a = d_in[i];
-      float b = d_in[i + blockDim.x];
+      // float a = (float)d_in[i];
+      // float b = (float)d_in[i + blockDim.x];
+      T a = d_in[i];
+      T b = d_in[i + blockDim.x];
       if(a > b) {
         sdata[tid] = a;
         indices[tid] = i;
@@ -50,14 +56,16 @@ __global__ void gMaxElement(float* d_out,
     while(i + 2 * gridDim.x * blockDim.x < end) {
       i += 2 * gridDim.x * blockDim.x;
 
-      float a = d_in[i];
+      // float a = (float)d_in[i];
+      T a = d_in[i];
       if(a > sdata[tid]) {
         sdata[tid] = a;
         indices[tid] = i;
       }
 
       if(i + blockDim.x < end) {
-        float b = d_in[i + blockDim.x];
+        // float b = (float)d_in[i + blockDim.x];
+        T b = d_in[i + blockDim.x];
         if(b > sdata[tid]) {
           sdata[tid] = b;
           indices[tid] = i + blockDim.x;
@@ -92,17 +100,20 @@ __global__ void gMaxElement(float* d_out,
   }
 }
 
-__global__ void gMaxElementUpdate(float* binCosts,
+template <typename T>
+__global__ void gMaxElementUpdate(T* binCosts, /* float* binCosts, */
                                   int* binIdxs,
-                                  float* probs,
+                                  T* probs,
                                   int* batchFirstElements,
-                                  float* outCosts,
+                                  T* outCosts, /* float* outCosts, */
                                   int* outIdxs,
                                   int* cummulatedBeamSizes,
                                   int NUM_BLOCKS) {
-  extern __shared__ float sdata[];
+  // extern __shared__ float sdata[];
+  extern __shared__ T sdata[];
   __shared__ int indices[512];
-  __shared__ float bestBinCost;
+  // __shared__ float bestBinCost;
+  __shared__ T bestBinCost;
   __shared__ int bestBinCostIdx;
 
   const int tid = threadIdx.x;
@@ -118,7 +129,8 @@ __global__ void gMaxElementUpdate(float* binCosts,
       ++pos) {
     int i = tid;
 
-    sdata[tid] = -3.40282e+38f;
+    // sdata[tid] = -3.40282e+38f;
+    sdata[tid] = (T)-10000;
 
     if(i < num_bins) {
       sdata[tid] = binCosts[batchIdx * NUM_BLOCKS + i];
@@ -126,8 +138,10 @@ __global__ void gMaxElementUpdate(float* binCosts,
     }
 
     if(i + blockDim.x < num_bins) {
-      float a = binCosts[batchIdx * NUM_BLOCKS + i];
-      float b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
+      // float a = binCosts[batchIdx * NUM_BLOCKS + i];
+      // float b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
+      T a = binCosts[batchIdx * NUM_BLOCKS + i];
+      T b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
       if(a > b) {
         sdata[tid] = a;
         indices[tid] = i;
@@ -140,14 +154,16 @@ __global__ void gMaxElementUpdate(float* binCosts,
     while(i + 2 * blockDim.x < num_bins) {
       i += 2 * blockDim.x;
 
-      float a = binCosts[batchIdx * NUM_BLOCKS + i];
+      // float a = binCosts[batchIdx * NUM_BLOCKS + i];
+      T a = binCosts[batchIdx * NUM_BLOCKS + i];
       if(a > sdata[tid]) {
         sdata[tid] = a;
         indices[tid] = i;
       }
 
       if(i + blockDim.x < num_bins) {
-        float b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
+        // float b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
+        T b = binCosts[batchIdx * NUM_BLOCKS + i + blockDim.x];
         if(b > sdata[tid]) {
           sdata[tid] = b;
           indices[tid] = i + blockDim.x;
@@ -178,7 +194,8 @@ __global__ void gMaxElementUpdate(float* binCosts,
       bestBinCost = sdata[0];
       bestBinCostIdx = batchIdx * NUM_BLOCKS + indices[0];
 
-      probs[binIdxs[bestBinCostIdx]] = -3.40282e+38f;
+      // probs[binIdxs[bestBinCostIdx]] = (T)-3.40282e+38f;
+      probs[binIdxs[bestBinCostIdx]] = (T) -10000;
 
       outIdxs[pos] = binIdxs[bestBinCostIdx];
       outCosts[pos] = bestBinCost;
@@ -190,16 +207,20 @@ __global__ void gMaxElementUpdate(float* binCosts,
         + (bestBinCostIdx - batchIdx * NUM_BLOCKS) * (blockDim.x * 2) + tid;
     const int dist = num_bins * 2 * blockDim.x;
 
-    sdata[tid] = -3.40282e+38f;
+    // sdata[tid] = -3.40282e+38f;
+    sdata[tid] = (T)-10000;
 
     if(i < batchFirstElements[batchIdx + 1]) {
+      // sdata[tid] = (float)probs[i];
       sdata[tid] = probs[i];
       indices[tid] = i;
     }
 
     if(i + blockDim.x < batchFirstElements[batchIdx + 1]) {
-      float a = probs[i];
-      float b = probs[i + blockDim.x];
+      // float a = (float)probs[i];
+      // float b = (float)probs[i + blockDim.x];
+      T a = probs[i];
+      T b = probs[i + blockDim.x];
       if(a > b) {
         sdata[tid] = a;
         indices[tid] = i;
@@ -212,14 +233,16 @@ __global__ void gMaxElementUpdate(float* binCosts,
     while(i + dist < batchFirstElements[batchIdx + 1]) {
       i += dist;
 
-      float a = probs[i];
+      // float a = (float)probs[i];
+      T a = probs[i];
       if(a > sdata[tid]) {
         sdata[tid] = a;
         indices[tid] = i;
       }
 
       if(i + blockDim.x < batchFirstElements[batchIdx + 1]) {
-        float b = probs[i + blockDim.x];
+        // float b = (float)probs[i + blockDim.x];
+        T b = probs[i + blockDim.x];
         if(b > sdata[tid]) {
           sdata[tid] = b;
           indices[tid] = i + blockDim.x;
@@ -280,12 +303,15 @@ public:
     cudaSetDevice(deviceId_.no);
 
     CUDA_CHECK(cudaMalloc((void**)&d_ind, maxBatchSize * NUM_BLOCKS * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&d_out, maxBatchSize * NUM_BLOCKS * sizeof(float)));
+    // CUDA_CHECK(cudaMalloc((void**)&d_out, maxBatchSize * NUM_BLOCKS * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void**)&d_out, maxBatchSize * NUM_BLOCKS * sizeof(TT_DATA_TYPE)));
 
     CUDA_CHECK(cudaMalloc((void**)&d_res_idx, maxBatchSize * maxBeamSize * sizeof(int)));
-    CUDA_CHECK(cudaMalloc((void**)&d_res,     maxBatchSize * maxBeamSize * sizeof(float)));
+    // CUDA_CHECK(cudaMalloc((void**)&d_res, maxBatchSize * maxBeamSize * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void**)&d_res, maxBatchSize * maxBeamSize * sizeof(TT_DATA_TYPE)));
 
-    CUDA_CHECK(cudaHostAlloc((void**)&h_res,     maxBeamSize * maxBatchSize * sizeof(float), cudaHostAllocDefault));
+    // CUDA_CHECK(cudaHostAlloc((void**)&h_res, maxBeamSize * maxBatchSize * sizeof(float), cudaHostAllocDefault));
+    CUDA_CHECK(cudaHostAlloc((void**)&h_res, maxBeamSize * maxBatchSize * sizeof(TT_DATA_TYPE), cudaHostAllocDefault));
     CUDA_CHECK(cudaHostAlloc((void**)&h_res_idx, maxBeamSize * maxBatchSize * sizeof(int), cudaHostAllocDefault));
 
     CUDA_CHECK(cudaMalloc((void**)&d_breakdown, maxBeamSize * sizeof(float)));
@@ -308,9 +334,10 @@ public:
   }
 
 private:
-  void getNBestList(float* probs,
+  void getNBestList(TT_DATA_TYPE* probs,
                     const std::vector<int>& batchFirstElementIdxs,
-                    const std::vector<int>& cummulatedBeamSizes) {
+                    const std::vector<int>& cummulatedBeamSizes) 
+  {
     cudaSetDevice(deviceId_.no);
     CUDA_CHECK(cudaMemcpyAsync(d_batchPosition,
                                batchFirstElementIdxs.data(),
@@ -325,23 +352,17 @@ private:
 
     const int numBatches = batchFirstElementIdxs.size() - 1;
 
-    gMaxElement<<<NUM_BLOCKS,
-                  BLOCK_SIZE,
-                  BLOCK_SIZE * sizeof(float),
-                  /* stream_ */ 0>>>(
-        d_out, d_ind, probs, numBatches, d_batchPosition);
+    gMaxElement<TT_DATA_TYPE><<<NUM_BLOCKS, 
+                                BLOCK_SIZE, 
+                                BLOCK_SIZE * sizeof(TT_DATA_TYPE), 
+                                /* stream_ */ 0>>>
+                                (d_out, d_ind, probs, numBatches, d_batchPosition);
 
-    gMaxElementUpdate<<<numBatches,
-                        BLOCK_SIZE,
-                        BLOCK_SIZE * sizeof(float),
-                        /* stream_ */ 0>>>(d_out,
-                                           d_ind,
-                                           probs,
-                                           d_batchPosition,
-                                           d_res,
-                                           d_res_idx,
-                                           d_cumBeamSizes,
-                                           NUM_BLOCKS);
+    gMaxElementUpdate<TT_DATA_TYPE><<<numBatches,
+                                      BLOCK_SIZE,
+                                      BLOCK_SIZE * sizeof(TT_DATA_TYPE),
+                                      /* stream_ */ 0>>>
+                                      (d_out, d_ind, probs, d_batchPosition, d_res, d_res_idx, d_cumBeamSizes, NUM_BLOCKS);
   }
 
 public:
@@ -372,9 +393,10 @@ private:
                 std::vector<unsigned>& outKeys,
                 std::vector<float>& outValues) {
     cudaSetDevice(deviceId_.no);
+
     CUDA_CHECK(cudaMemcpyAsync(h_res,
                                d_res,
-                               number * sizeof(float),
+                               number * sizeof(TT_DATA_TYPE),
                                cudaMemcpyDeviceToHost,
                                /* stream_ */ 0));
     CUDA_CHECK(cudaMemcpyAsync(h_res_idx,
@@ -386,7 +408,7 @@ private:
 
     for(size_t i = 0; i < number; ++i) {
       outKeys.push_back(h_res_idx[i]);
-      outValues.push_back(h_res[i]);
+      outValues.push_back((float)h_res[i]);
     }
 
     lastN = number;
@@ -412,15 +434,18 @@ private:
 
   const int BLOCK_SIZE = 512;
   const int NUM_BLOCKS;
-  int* d_ind;
 
-  float* d_out;
+  int* d_ind;
+  // float* d_out;
+  TT_DATA_TYPE* d_out;
 
   int* d_res_idx;
-  float* d_res;
+  // float* d_res;
+  TT_DATA_TYPE* d_res;
 
   int* h_res_idx;
-  float* h_res;
+  // float* h_res;
+  TT_DATA_TYPE* h_res;
 
   float* d_breakdown;
   int* d_batchPosition;

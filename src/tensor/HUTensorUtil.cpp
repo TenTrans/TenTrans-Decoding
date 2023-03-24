@@ -23,7 +23,7 @@ void HUTensorUtil::Save(const std::string name, HUPtr<HUTensor> a, const std::st
 {
 	LOG(info, "Saving tensor {} to {}", tensorName, name);
 
-	std::vector<float> v;
+	std::vector<TT_DATA_TYPE> v;
 	a->get(v);
 	auto& pShape = a->shape();
 	unsigned dim = pShape.size();
@@ -65,7 +65,7 @@ HUPtr<HUTensor> HUTensorUtil::Transpose(HUPtr<HUTensor> input, const std::vector
 
 HUPtr<HUTensor> HUTensorUtil::Neg(HUPtr<HUTensor> input, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-	auto newMem = mem->alloc<float>(input->size());
+	auto newMem = mem->alloc<TT_DATA_TYPE>(input->size());
 	auto output = HUNew<HUTensor>(newMem, input->shape(), device);
 	NegOP(output, input);
 	return output;
@@ -74,7 +74,7 @@ HUPtr<HUTensor> HUTensorUtil::Neg(HUPtr<HUTensor> input, HUPtr<HUMemPool> mem, H
 HUPtr<HUTensor> HUTensorUtil::Plus(HUPtr<HUTensor> a, HUPtr<HUTensor> b, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
 	HUShape newShape = HUShape::broadcast({a, b});
-	auto newMem = mem->alloc<float>(newShape.elements());
+	auto newMem = mem->alloc<TT_DATA_TYPE>(newShape.elements());
 	auto output = HUNew<HUTensor>(newMem, newShape, device);
 	PlusBroadcast(output, a, b);
 	return output;
@@ -94,7 +94,8 @@ HUPtr<HUTensor> HUTensorUtil::TransposedLogMask(HUPtr<HUTensor> mask, HUPtr<HUMe
 
     // [-3: dimBatch, -2: dimWords broadcast=1, -1: dimWords]
 	ScaleAndShift(negMask, 1, 1);
-	ScaleAndShift(negMask, -99999999.f, 0);
+	/// ScaleAndShift(negMask, -99999999.f, 0);
+    ScaleAndShift(negMask, -10000.f, 0);  // consider half && float
 
     // [-4: dimBatch, -3: numHeads broadcast=1, -2: dimWords broadcast=1, -1: dimWords]
 	auto output = Reshape(negMask, {ms[-3], 1, ms[-2], ms[-1]});
@@ -163,7 +164,7 @@ void HUTensorUtil::Affine(HUPtr<HUTensor> &y, HUPtr<HUTensor> x, HUPtr<HUTensor>
     */
 
     auto yShape = HUTensorUtil::GetAffineShape(x, w, transA, transB);
-    auto yMem = mem->alloc<float>(yShape.elements());
+    auto yMem = mem->alloc<TT_DATA_TYPE>(yShape.elements());
     y = HUNew<HUTensor>(yMem, yShape, device);
 
     /*
@@ -220,7 +221,7 @@ HUPtr<HUTensor> HUTensorUtil::Affine(HUPtr<HUTensor> x, HUPtr<HUTensor> w, HUPtr
     */
 	
 	auto yShape = HUTensorUtil::GetAffineShape(x, w, transA, transB);
-	auto yMem = mem->alloc<float>(yShape.elements());
+	auto yMem = mem->alloc<TT_DATA_TYPE>(yShape.elements());
 	auto y = HUNew<HUTensor>(yMem, yShape, device);
 
 	/*
@@ -267,7 +268,7 @@ HUPtr<HUTensor> HUTensorUtil::Affine(HUPtr<HUTensor> x, HUPtr<HUTensor> w, HUPtr
 HUPtr<HUTensor> HUTensorUtil::Multiply(HUPtr<HUTensor> x, HUPtr<HUTensor> w, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device,  bool transA, bool transB, float beta, float alpha)
 {
     auto yShape = HUTensorUtil::GetAffineShape(x, w, transA, transB);
-    auto yMem = mem->alloc<float>(yShape.elements());
+    auto yMem = mem->alloc<TT_DATA_TYPE>(yShape.elements());
     auto y = HUNew<HUTensor>(yMem, yShape, device);
 
     Prod(y, x, w, transA, transB, beta, alpha);
@@ -293,7 +294,7 @@ HUPtr<HUTensor> HUTensorUtil::ProdBatched_v2(HUPtr<HUTensor> A, HUPtr<HUTensor> 
 HUPtr<HUTensor> HUTensorUtil::ProdBatched(HUPtr<HUTensor> A, HUPtr<HUTensor> B, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, bool transA, bool transB, float beta, float scalar)
 {
 	auto cShape = HUTensorUtil::GetDotBatchedShape(A, B, transA, transB, scalar);
-	auto cMem = mem->alloc<float>(cShape.elements());
+	auto cMem = mem->alloc<TT_DATA_TYPE>(cShape.elements());
 	auto C = HUNew<HUTensor>(cMem, cShape, device);
 
 	ProdBatchedOP(C, A, B, mem, transA, transB, beta, scalar);
@@ -302,7 +303,7 @@ HUPtr<HUTensor> HUTensorUtil::ProdBatched(HUPtr<HUTensor> A, HUPtr<HUTensor> B, 
 
 HUPtr<HUTensor> HUTensorUtil::Softmax(HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> mask)
 {
-	auto outMem = mem->alloc<float>(in->size());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(in->size());
 	auto out = HUNew<HUTensor>(outMem, in->shape(), device);
 	SoftmaxOP(out, in, mask);
 	return out;
@@ -316,9 +317,18 @@ HUPtr<HUTensor> HUTensorUtil::LogSoftmax(HUPtr<HUTensor> in, HUPtr<HUMemPool> me
     return out;
 }
 
+HUPtr<HUTensor> HUTensorUtil::AddBiasLogSoftmax(HUPtr<HUTensor> in, const HUPtr<HUTensor> bias, const int realDimBatch, uint8_t* isAllDone, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
+{
+    auto outMem = mem->alloc<TT_DATA_TYPE>(in->size());
+    auto out = HUNew<HUTensor>(outMem, in->shape(), device);
+    // AddBiasLogSoftmaxOP(out, in, bias);
+    AddBiasLogSoftmaxOP_V2(out, in, bias, realDimBatch, isAllDone);
+    return out;
+}
+
 HUPtr<HUTensor> HUTensorUtil::AddBiasInputLayerNormalization(HUPtr<HUTensor> in, HUPtr<HUTensor> x, const HUPtr<HUTensor> bias, HUPtr<HUTensor> gamma, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> beta, float eps)
 {
-    auto outMem = mem->alloc<float>(in->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(in->size());
     auto out = HUNew<HUTensor>(outMem, in->shape(), device);
     AddBiasInputLayerNormalOP(out, in, x, bias, gamma, beta, eps);
     return out;
@@ -326,7 +336,7 @@ HUPtr<HUTensor> HUTensorUtil::AddBiasInputLayerNormalization(HUPtr<HUTensor> in,
 
 HUPtr<HUTensor> HUTensorUtil::LayerNormalization(HUPtr<HUTensor> in, HUPtr<HUTensor> gamma, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device, HUPtr<HUTensor> beta, float eps)
 {
-	auto outMem = mem->alloc<float>(in->size());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(in->size());
 	auto out = HUNew<HUTensor>(outMem, in->shape(), device);
 #ifdef FAST_LAYERNORM
     LayerNormalOP_V2(out, in, gamma, beta, eps);
@@ -399,17 +409,17 @@ HUPtr<HUTensor> HUTensorUtil::Swish(HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HU
 
 HUPtr<HUTensor> HUTensorUtil::Zeros(HUShape inShape, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-	auto outMem = mem->alloc<float>(inShape.elements());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(inShape.elements());
 	auto out = HUNew<HUTensor>(outMem, inShape, device);
-	out->set(0.f);
+	out->set((TT_DATA_TYPE)0.f);
 	return out;
 }
 
 HUPtr<HUTensor> HUTensorUtil::Ones(HUShape inShape, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>(inShape.elements());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(inShape.elements());
     auto out = HUNew<HUTensor>(outMem, inShape, device);
-    out->set(1.0); 
+    out->set((TT_DATA_TYPE)1.0); 
     return out;
 }
 
@@ -424,10 +434,22 @@ HUPtr<HUTensor> HUTensorUtil::Set(HUShape inShape, const float num, HUPtr<HUMemP
 HUPtr<HUTensor> HUTensorUtil::CopyRows(HUPtr<HUTensor> in, const std::vector<size_t>& indices, HUPtr<HUMemPool> mem)
 {
 	auto outShape = GetCopyRowsShape(in, indices);
-	auto outMem = mem->alloc<float>(outShape.elements());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(outShape.elements());
 	auto out = HUNew<HUTensor>(outMem, outShape, in->getDevice());
 	CopyRowsOP(out, in, indices);
 	return out;
+}
+
+HUPtr<HUTensor> HUTensorUtil::CopyRows_V2(HUPtr<HUTensor> in, size_t* indices, int num, HUPtr<HUMemPool> mem)
+{
+    // auto outShape = GetCopyRowsShape(in, indices);
+    auto outShape = in->shape();
+    ABORT_IF(outShape.size() != 2, "[TenTrans] rows operator can only be used with 2-dimensional tensors");
+    outShape.set(0, num);
+    auto outMem = mem->alloc<TT_DATA_TYPE>(outShape.elements());
+    auto out = HUNew<HUTensor>(outMem, outShape, in->getDevice());
+    CopyRowsOP_V2(out, in, indices, num);
+    return out;
 }
 
 HUPtr<HUTensor> HUTensorUtil::Reshape(HUPtr<HUTensor> in, HUShape shape)
@@ -451,7 +473,7 @@ HUShape HUTensorUtil::GetConcatenateShape(std::vector<HUPtr<HUTensor> >& nodes, 
 HUPtr<HUTensor> HUTensorUtil::Concatenate(std::vector<HUPtr<HUTensor> > nodes, int ax, HUPtr<HUMemPool> mem)
 {
 	auto outShape = GetConcatenateShape(nodes, ax);
-	auto outMem = mem->alloc<float>(outShape.elements());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(outShape.elements());
 	auto out = HUNew<HUTensor>(outMem, outShape, nodes.back()->getDevice());
 	ConcatenateOP(out, nodes, ax);
 	return out;
@@ -487,17 +509,17 @@ HUPtr<HUTensor> HUTensorUtil::Repeat(HUPtr<HUTensor> a, size_t repeats, int ax, 
 	return Concatenate(std::vector<HUPtr<HUTensor> >(repeats, a), ax, mem);
 }
 
-HUPtr<HUTensor> HUTensorUtil::ConstantFloat(HUShape inShape, std::vector<float> data, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
+HUPtr<HUTensor> HUTensorUtil::ConstantFloat(HUShape inShape, std::vector<TT_DATA_TYPE> data, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-	auto outMem = mem->alloc<float>(inShape.elements());
+	auto outMem = mem->alloc<TT_DATA_TYPE>(inShape.elements());
 	auto out = HUNew<HUTensor>(outMem, inShape, device);
-	out->set((float*)data.data(), (float*)data.data() + data.size());
+	out->set((TT_DATA_TYPE*)data.data(), (TT_DATA_TYPE*)data.data() + data.size());
 	return out;
 }
 
 void HUTensorUtil::CopyFrom(HUPtr<HUTensor> &out, HUPtr<HUTensor> in, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>(in->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(in->size());
     out = HUNew<HUTensor>(outMem, in->shape(), device);
     out->set(in->data(), in->data() + in->size());
 }
@@ -558,34 +580,21 @@ HUPtr<HUTensor> HUTensorUtil::ReduceSum(HUPtr<HUTensor> in, int ax, HUPtr<HUMemP
 HUPtr<HUTensor> HUTensorUtil::FusedQKVSelfAttention(
         const HUPtr<HUTensor> qkv_buf, const HUPtr<HUTensor> QKV_bias,
         HUPtr<HUTensor> key_cache, HUPtr<HUTensor> value_cache, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, uint8_t* isAllDone, 
         const int head_num, const int step, 
         HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>((qkv_buf->size())/3);
+    auto outMem = mem->alloc<TT_DATA_TYPE>((qkv_buf->size()) / 3);
     int qkvHiddenSize = qkv_buf->shape()[-1];
     auto outShape = qkv_buf->shape();
-    outShape.set(-1, qkvHiddenSize/3);
+    outShape.set(-1, qkvHiddenSize / 3);
     auto context_buf = HUNew<HUTensor>(outMem, outShape, device);
-
-    /*
-    std::cout << "head_num: " << head_num << "\tinference_batch_size: " << inference_batch_size
-        << "\tstep: " << step << std::endl;
-    */
-
-    /*
-    FusedQKVSelfAttentionOP(
-            qkv_buf, QKV_bias, 
-            key_cache, value_cache, 
-            context_buf, inference_batch_size, 
-            head_num, step);
-    */
 
     MaskedMultiHeadAttentionOP(
             qkv_buf, QKV_bias,
             key_cache, value_cache,
             context_buf, 
-            isAllDoneCopy, isAllDone, 
+            realDimBatch, isAllDone, 
             head_num, step);
 
     return context_buf;
@@ -596,45 +605,20 @@ HUPtr<HUTensor> HUTensorUtil::CrossAttention(
         HUPtr<HUTensor> key_cache, const HUPtr<HUTensor> K_bias, 
         HUPtr<HUTensor> value_cache, const HUPtr<HUTensor> V_bias, 
         HUPtr<HUTensor> lengths, 
-        const std::vector<uint8_t> &isAllDoneCopy, uint8_t* isAllDone, 
+        const int realDimBatch, const uint8_t* isAllDone, 
         const int head_num, const int step, 
         HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>(query_buf->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(query_buf->size());
     auto context_buf = HUNew<HUTensor>(outMem, query_buf->shape(), device);
     // LOG(trace, "[TenTrans][HUTensorUtil][CrossAttention] context_buf {}", context_buf->debug());
 
-    /*
-    const std::vector<bool> isAllDoneTmp;
-    int repeatedTimes = query_buf->size()[-3] / isAllDone.size();
-    if (repeatedTimes > 1)
-    {
-        for (int i = 0; i < isAllDone.size(); i++)
-        {
-            for (int j = 0; j < repeatedTimes; j++)
-            {
-                isAllDoneTmp.push_back(isAllDone[i]);
-            }
-        }
-    }
-    else
-    {
-        isAllDoneTmp = isAllDone;
-    }
-
-    cudaSetDevice(query_buf->getDeviceId().no);
-    bool* isAllDoneDevice;
-    CUDA_CHECK(cudaMalloc(&isAllDoneDevice, isAllDoneTmp.size() * sizeof(bool)));
-    CUDA_CHECK(cudaMemcpy(isAllDoneDevice, isAllDoneTmp.data(), isAllDoneTmp.size() * sizeof(bool), cudaMemcpyHostToDevice));
-    */
-
-
-    CrosssAttentionOP(
+    CrossAttentionOP(
             query_buf, Q_bias, 
             key_cache, K_bias, 
             value_cache, V_bias, 
             lengths, context_buf, 
-            isAllDoneCopy, isAllDone, 
+            realDimBatch, isAllDone, 
             head_num, step);
 
     return context_buf;
@@ -650,7 +634,7 @@ HUPtr<HUTensor> HUTensorUtil::EncoderUnFusedSelfAttention(
 {
     cudaSetDevice(input->getDeviceId().no);
 
-    auto outMem = mem->alloc<float>(input->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(input->size());
     auto att_out = HUNew<HUTensor>(outMem, input->shape(), device);
 
     /* only multiply weight matrix */
@@ -664,20 +648,20 @@ HUPtr<HUTensor> HUTensorUtil::EncoderUnFusedSelfAttention(
     HUTensorUtil::Multiply_v2(params.v_tmp, input, V);
     */
 
-    float** qkv_kernel;
-    cudaMalloc(&qkv_kernel, sizeof(float *) * 9);
-    float** qkv_input;
-    float** qkv_tmp;
+    TT_DATA_TYPE** qkv_kernel;
+    cudaMalloc(&qkv_kernel, sizeof(TT_DATA_TYPE *) * 9);
+    TT_DATA_TYPE** qkv_input;
+    TT_DATA_TYPE** qkv_tmp;
     qkv_input = qkv_kernel + 3;
     qkv_tmp = qkv_input + 3;
 
-    const float* hArray[] { Q->data(), K->data(), V->data(), 
+    const TT_DATA_TYPE* hArray[] { Q->data(), K->data(), V->data(), 
                             input->data(), input->data(), input->data(),
                             (params.q_tmp)->data(), (params.k_tmp)->data(), (params.v_tmp)->data() };
-    cudaMemcpyAsync((void*)qkv_kernel, hArray, sizeof(float *) * 9, cudaMemcpyHostToDevice);
+    cudaMemcpyAsync((void*)qkv_kernel, hArray, sizeof(TT_DATA_TYPE *) * 9, cudaMemcpyHostToDevice);
 
     auto cublas_handle = input->getDevice()->getCublasHandle();
-    float alpha = 1.0f, beta = 0.0f;
+    TT_DATA_TYPE alpha = (TT_DATA_TYPE)1.0f, beta = (TT_DATA_TYPE)0.0f;
     
     const int batch_size = input->shape()[-3];
     const int seq_len = input->shape()[-2];
@@ -770,14 +754,15 @@ void HUTensorUtil::Transpose4DBatchMajor(
 void HUTensorUtil::UpdateKVBatchMajorCache(
         HUPtr<HUTensor> key_src_cache, HUPtr<HUTensor> key_tgt_cache,
         HUPtr<HUTensor> value_src_cache, HUPtr<HUTensor> value_tgt_cache,
-        const std::vector<size_t> &beams_ids, const int batch_size, 
-        const int beam_width, const int head_num, const int step)
+        size_t* beams_ids, uint8_t* isAllDone, 
+        const int batch_size, const int beam_width, const int head_num, const int step)
 {
 
     UpdateKVBatchMajorCacheOP(
             key_src_cache, key_tgt_cache,
             value_src_cache, value_tgt_cache, 
-            beams_ids, batch_size, beam_width, head_num, step);
+            beams_ids, isAllDone, batch_size, 
+            beam_width, head_num, step);
 }
 
 void HUTensorUtil::AddBiasInput(HUPtr<HUTensor> output, const HUPtr<HUTensor> bias, const HUPtr<HUTensor> input)
@@ -790,7 +775,7 @@ HUPtr<HUTensor> HUTensorUtil::EmbeddingLookUpPositionEncoding(const HUPtr<HUTens
     // std::cout << "[1]" << std::endl;
     int dimWords = word_ids.size();
     int dimModel = word_emb->shape()[-1];
-    auto outMem = mem->alloc<float>(dimWords * dimModel);
+    auto outMem = mem->alloc<TT_DATA_TYPE>(dimWords * dimModel);
     auto outShape = HUShape({dimWords, 1, dimModel});
     auto out = HUNew<HUTensor>(outMem, outShape, device);
 
@@ -805,7 +790,7 @@ HUPtr<HUTensor> HUTensorUtil::StartIdEmbeddingLookUpPositionEncoding(const HUPtr
 {
     int dimSeqLen = word_ids.size() / batch_size;
     int dimModel = word_emb->shape()[-1];
-    auto outMem = mem->alloc<float>(batch_size * dimSeqLen * dimModel);
+    auto outMem = mem->alloc<TT_DATA_TYPE>(batch_size * dimSeqLen * dimModel);
     auto outShape = HUShape({batch_size, dimSeqLen, dimModel});
     auto out = HUNew<HUTensor>(outMem, outShape, device);
 
@@ -816,7 +801,7 @@ HUPtr<HUTensor> HUTensorUtil::StartIdEmbeddingLookUpPositionEncoding(const HUPtr
 
 HUPtr<HUTensor> HUTensorUtil::BroadCastPlus(HUPtr<HUTensor> log_probs, HUPtr<HUTensor> cum_log_probs, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>(log_probs->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(log_probs->size());
     auto out = HUNew<HUTensor>(outMem, log_probs->shape(), device);
 
     BroadCastPlusOP(out, log_probs, cum_log_probs);
@@ -826,7 +811,7 @@ HUPtr<HUTensor> HUTensorUtil::BroadCastPlus(HUPtr<HUTensor> log_probs, HUPtr<HUT
 
 HUPtr<HUTensor> HUTensorUtil::BroadCastPlusWithBias(HUPtr<HUTensor> log_probs, HUPtr<HUTensor> cum_log_probs, const HUPtr<HUTensor> bias, HUPtr<HUMemPool> mem, HUPtr<HUDevice> device)
 {
-    auto outMem = mem->alloc<float>(log_probs->size());
+    auto outMem = mem->alloc<TT_DATA_TYPE>(log_probs->size());
     auto out = HUNew<HUTensor>(outMem, log_probs->shape(), device);
 
     BroadCastPlusWithBiasOP(out, log_probs, cum_log_probs, bias);
@@ -839,11 +824,30 @@ void HUTensorUtil::TopK(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, st
     TopKOP(log_probs, topKIds, topKValues, vocab_size);
 }
 
+/*
 void HUTensorUtil::TopK_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size)
 {
     TopKOP_V2(log_probs, topKIds, topKValues, K, vocab_size);
 }
+*/
 
+void HUTensorUtil::TopK_V2(HUPtr<HUTensor> log_probs, std::vector<int> &topKIds, std::vector<float> &topKValues, const int K, const int vocab_size, void* tmp_storage)
+{
+    // log_probs -> [batch, beam*vocab_size]
+    TopKOP_V2(log_probs, topKIds, topKValues, K, vocab_size, tmp_storage);
+}
+
+void HUTensorUtil::TopKSoftmax(HUPtr<HUTensor> log_probs,
+                               const HUPtr<HUTensor> bias,
+                               std::vector<float> &cum_log_probs,
+                               std::vector<int> &topKIds,
+                               const int K,
+                               void* temp_storage,
+                               const int temp_storage_size,
+                               uint8_t* isAllDone)
+{
+    TopKSoftmaxOP(log_probs, bias, cum_log_probs, topKIds, K, temp_storage, temp_storage_size, isAllDone);
+}
 /*
 void HUTensorUtil::TopK(HUPtr<HUTensor> logProbs, const int K, HUPtr<HUTensor> topKIds, HUPtr<HUTensor> topKValues)
 {

@@ -12,7 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace TenTrans{
+namespace TenTrans {
 class AllocationException : public std::exception {
 public:
   virtual const char* what() const throw() {
@@ -21,7 +21,7 @@ public:
 };
 
 // Memory Piece in use
-class HUMemoryPiece{
+class HUMemoryPiece {
 private:
   	uint8_t* data_;
   	size_t size_;
@@ -219,6 +219,27 @@ public:
 	HUPtr<HUMemoryPiece> alloc(size_t num) {
 		return alloc(capacity<T>(num));
 	}
+
+    HUPtr<HUMemoryPiece> alloc(size_t num, TENSOR_DATA_TYPE dataType) {
+        if (dataType == TENSOR_DATA_TYPE::TT_INT32) {
+            return alloc(capacity<int>(num));
+        }
+        else if (dataType == TENSOR_DATA_TYPE::TT_FLOAT32) {
+            return alloc(capacity<float>(num));
+        }
+        else if (dataType == TENSOR_DATA_TYPE::TT_DOUBLE) {
+            return alloc(capacity<double>(num));
+        }
+        else if (dataType == TENSOR_DATA_TYPE::TT_FLOAT16) {
+            return alloc(capacity<half>(num));
+        }
+        else if (dataType == TENSOR_DATA_TYPE::TT_INT8) {
+            return alloc(capacity<bool>(num));
+        }
+        else {
+            return alloc(capacity<float>(num));
+        }  
+    }
 	
 	// Allocate a piece of memory from memory pool as needed
 	// Step 1. Get the corresponding memory block according to the needed size, and erase this block from block lists

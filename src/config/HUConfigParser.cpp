@@ -145,6 +145,11 @@ void HUConfigParser::addOptionsModel(po::options_description& desc) {
      "Tie all embedding layers and output layer")
     ("use-emb-scale", po::value<bool>()->zero_tokens()->default_value(true), 
      "Wheather scale input word embedding")
+    ("early-stop", po::value<bool>()->zero_tokens()->default_value(false), 
+     "use early-stop strategy for beam search.")
+    // wheather use fp16
+    ("use-fp16", po::value<bool>()->zero_tokens()->default_value(false), 
+     "Wheather use fp16")
     ("transformer-heads", po::value<int>()->default_value(8),
      "Number of head in multi-head attention (transformer)")
     ("transformer-dim-ffn", po::value<int>()->default_value(8192),
