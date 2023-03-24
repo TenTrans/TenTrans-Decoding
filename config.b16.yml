@@ -1,0 +1,37 @@
+models:
+    - /data1/envs/Decoder/build.nmt/models/ende_enc6dec6_h512_postnorm/checkpoint_seq2seq_wmtende_mt_best.npz.fp16
+vocabs:
+    - /data1/envs/Decoder/build.nmt/models/ende_enc6dec6_h512_postnorm/vocab.ende.yml
+    - /data1/envs/Decoder/build.nmt/models/ende_enc6dec6_h512_postnorm/vocab.ende.yml
+enc-depth: 6
+dec-depth: 6
+dim-emb: 512
+transformer-dim-ffn: 2048
+transformer-heads: 8
+share-all-embed: False
+share-out-embed: False
+transformer-ffn-activation: relu
+normalize-before: False
+learned-pos: True
+use-fp16: False
+max-seq-length: 512
+use-emb-scale: False
+transformer-ffn-depth: 1
+normalize: 0.6
+decode-length: 50
+early-stop: True
+n-best: True
+
+## vocabulary selection
+use-shortlist: True
+shortlist-path: /data1/envs/Decoder/build.nmt/vocab_selection/wmt14.en2de.bpe.top100.0315
+shortlist-top-k: 100
+shortlist-common-k: 100
+
+devices:
+    - 0
+mini-batch: 16
+beam-size: 4
+
+#trace - debug - info - warn - err(or) - critical - off
+log-level: trace
